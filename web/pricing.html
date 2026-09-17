@@ -57,6 +57,13 @@
 
     <section class="panel" style="--i:2">
       <h2 class="calc-title">Мои игры</h2>
+
+      <div class="bulk" id="bulk" hidden>
+        <label class="check"><input type="checkbox" id="pickAllGames"><span>Выбрать все</span></label>
+        <span class="muted" id="pickGamesInfo">выбрано 0</span>
+        <button class="btn danger" id="removePicked" disabled><span class="label">Убрать выбранные</span><span class="spinner"></span></button>
+      </div>
+
       <div class="games" id="games"></div>
       <p class="tip" id="gamesHint"></p>
     </section>
@@ -73,6 +80,10 @@
         <button class="ghost" id="closeModal">Закрыть</button>
       </div>
       <input type="search" id="scanFilter" class="search" placeholder="Поиск по играм и разделам">
+      <div class="bulk compact">
+        <label class="check"><input type="checkbox" id="pickAllScan"><span>Выбрать все</span></label>
+        <button class="mini-btn" id="clearScan">Снять выбор</button>
+      </div>
       <div class="scan-list" id="scanList"></div>
       <div class="modal-foot">
         <span class="muted" id="pickInfo">выбрано 0</span>

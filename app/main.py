@@ -369,6 +369,16 @@ def api_pricing_remove_game(key: str):
     return {"ok": True, "games": data["games"]}
 
 
+@app.post("/api/pricing/games/delete", dependencies=[Depends(require_auth)])
+async def api_pricing_remove_games(request: Request):
+    body = await request.json()
+    keys = [str(k) for k in (body.get("keys") or [])]
+    if not keys:
+        return JSONResponse({"ok": False, "error": "Не выбрано ни одной игры"}, status_code=400)
+    data = pricing.remove_games(keys)
+    return {"ok": True, "games": data["games"], "removed": len(keys)}
+
+
 @app.get("/api/pricing/lots", dependencies=[Depends(require_auth)])
 def api_pricing_lots(key: str = ""):
     settings = store.load()

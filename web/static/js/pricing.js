@@ -5,6 +5,7 @@
   let found = [];          // результат сканирования
   let picked = new Set();  // выбранные в окне сканирования
   let openGame = null;     // раскрытая игра
+  let pickedGames = new Set();  // отмеченные игры в списке
   let lotsCache = {};      // лоты с FunPay по ключу игры
 
   const toast = (msg, kind = '') => {
@@ -50,8 +51,11 @@
     const items = state.items[game.key] || [];
     const open = openGame === game.key;
     return `
-      <div class="game ${open ? 'open' : ''}" data-key="${esc(game.key)}">
+      <div class="game ${open ? 'open' : ''} ${pickedGames.has(game.key) ? 'picked' : ''}" data-key="${esc(game.key)}">
         <div class="game-head" data-toggle="${esc(game.key)}">
+          <label class="check" data-nopick>
+            <input type="checkbox" data-pick="${esc(game.key)}" ${pickedGames.has(game.key) ? 'checked' : ''}>
+          </label>
           <div class="game-name">
             <span class="gtitle">${esc(game.game || game.name)}</span>
             <span class="gsub">${esc(game.name)}${game.lots ? ` · ${game.lots} лотов` : ''}</span>
@@ -85,9 +89,24 @@
       </div>`;
   };
 
+  const paintBulk = () => {
+    const keys = state.games.map((g) => g.key);
+    pickedGames = new Set([...pickedGames].filter((k) => keys.includes(k)));
+
+    $('bulk').hidden = !state.games.length;
+    $('pickGamesInfo').textContent = `выбрано ${pickedGames.size}`;
+    $('removePicked').disabled = !pickedGames.size;
+    $('removePicked').querySelector('.label').textContent =
+      `Убрать выбранные${pickedGames.size ? ` (${pickedGames.size})` : ''}`;
+    const all = $('pickAllGames');
+    all.checked = state.games.length > 0 && pickedGames.size === state.games.length;
+    all.indeterminate = pickedGames.size > 0 && pickedGames.size < state.games.length;
+  };
+
   const render = () => {
     $('fee').value = state.fee;
     $('games').innerHTML = state.games.map(gameCard).join('');
+    paintBulk();
     const total = Object.values(state.items).reduce((a, i) => a + i.length, 0);
     $('gamesHint').textContent = state.games.length
       ? `Игр: ${state.games.length}, товаров с ценой закупа: ${total}. Названия сопоставляются с заказами автоматически.`
@@ -124,6 +143,23 @@
       });
     });
     $('pickInfo').textContent = `выбрано ${picked.size}`;
+    paintScanBulk();
+  };
+
+  const visibleScanKeys = () => {
+    const q = $('scanFilter').value.trim().toLowerCase();
+    return found
+      .filter((g) => !g.added && (!q || `${g.game} ${g.name}`.toLowerCase().includes(q)))
+      .map((g) => g.key);
+  };
+
+  const paintScanBulk = () => {
+    const keys = visibleScanKeys();
+    const chosen = keys.filter((k) => picked.has(k)).length;
+    const all = $('pickAllScan');
+    all.disabled = !keys.length;
+    all.checked = keys.length > 0 && chosen === keys.length;
+    all.indeterminate = chosen > 0 && chosen < keys.length;
   };
 
   $('scanBtn').addEventListener('click', async () => {
@@ -162,6 +198,17 @@
     busy(btn, false);
   });
 
+  $('pickAllScan').addEventListener('change', (e) => {
+    const keys = visibleScanKeys();
+    keys.forEach((k) => (e.target.checked ? picked.add(k) : picked.delete(k)));
+    renderScan();
+  });
+
+  $('clearScan').addEventListener('click', () => {
+    picked = new Set();
+    renderScan();
+  });
+
   $('closeModal').addEventListener('click', () => ($('modal').hidden = true));
   $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').hidden = true; });
   $('scanFilter').addEventListener('input', renderScan);
@@ -169,8 +216,43 @@
 
   // ---------------------------- действия внутри игры ----------------------------
 
+  $('pickAllGames').addEventListener('change', (e) => {
+    pickedGames = e.target.checked ? new Set(state.games.map((g) => g.key)) : new Set();
+    render();
+  });
+
+  $('removePicked').addEventListener('click', async () => {
+    if (!pickedGames.size) return;
+    const names = state.games.filter((g) => pickedGames.has(g.key)).map((g) => g.game || g.name);
+    if (!confirm(`Убрать ${pickedGames.size} игр вместе с товарами?\n\n${names.join(', ')}`)) return;
+    const btn = $('removePicked');
+    busy(btn, true);
+    try {
+      const keys = [...pickedGames];
+      await api('/api/pricing/games/delete', { method: 'POST', body: JSON.stringify({ keys }) });
+      if (keys.includes(openGame)) openGame = null;
+      pickedGames = new Set();
+      await reload();
+      toast(`Убрано игр: ${keys.length}`, 'good');
+    } catch (e) {
+      if (e.message !== 'auth') toast(e.message, 'bad');
+    }
+    busy(btn, false);
+  });
+
+  $('games').addEventListener('change', (e) => {
+    const pick = e.target.closest('[data-pick]');
+    if (!pick) return;
+    pick.checked ? pickedGames.add(pick.dataset.pick) : pickedGames.delete(pick.dataset.pick);
+    pick.closest('.game').classList.toggle('picked', pick.checked);
+    paintBulk();
+  });
+
   $('games').addEventListener('click', async (e) => {
     const t = e.target;
+
+    // клик по чекбоксу не должен раскрывать игру
+    if (t.closest('[data-nopick]')) { e.stopPropagation(); return; }
 
     const delGame = t.closest('[data-delgame]');
     if (delGame) {

@@ -62,9 +62,15 @@ def add_games(found: list[dict], keys: list[str]) -> dict:
 
 
 def remove_game(key: str) -> dict:
+    return remove_games([key])
+
+
+def remove_games(keys: list[str]) -> dict:
     data = load()
-    data["games"] = [g for g in data["games"] if g["key"] != key]
-    data["items"].pop(key, None)
+    drop = set(keys)
+    data["games"] = [g for g in data["games"] if g["key"] not in drop]
+    for key in drop:
+        data["items"].pop(key, None)
     return save(data)
 
 
