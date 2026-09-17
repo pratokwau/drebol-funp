@@ -4,9 +4,9 @@
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/pratokwau/drebol-funp.git"
-APP_DIR="/opt/drebol-funp"
+APP_DIR="/root/drebol-funp"
+OLD_DIR="/opt/drebol-funp"
 SERVICE="drebol-funp"
-SERVICE_USER="drebol"
 WEBROOT="/var/www/certbot"
 
 C_R=$'\e[0m'; C_G=$'\e[1;32m'; C_Y=$'\e[1;33m'; C_B=$'\e[1;36m'; C_E=$'\e[1;31m'
@@ -81,6 +81,13 @@ apt-get install -y -qq git curl ca-certificates python3 python3-venv python3-pip
 ok "Пакеты установлены."
 
 # ---------- код ----------
+if [[ -d "$OLD_DIR" && ! -d "$APP_DIR" ]]; then
+  log "Нашёл старую установку в $OLD_DIR — переношу в $APP_DIR..."
+  mv "$OLD_DIR" "$APP_DIR"
+  rm -rf "$APP_DIR/venv"
+  ok "Перенесено (логин и пароль сохранены)."
+fi
+
 if [[ -d "$APP_DIR/.git" ]]; then
   log "Обновляю код в $APP_DIR..."
   git -C "$APP_DIR" fetch --all -q
@@ -91,8 +98,6 @@ else
   git clone -q "$REPO_URL" "$APP_DIR"
 fi
 ok "Код на месте."
-
-id -u "$SERVICE_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 
 log "Ставлю python-зависимости..."
 python3 -m venv "$APP_DIR/venv"
@@ -123,7 +128,8 @@ ADMIN_LOGIN=admin
 ADMIN_PASSWORD=$ADMIN_PASSWORD
 EOF
 chmod 600 "$APP_DIR/.env"
-chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
+chmod 700 "$APP_DIR"
+chown -R root:root "$APP_DIR"
 
 # ---------- systemd ----------
 log "Настраиваю systemd-сервис..."
@@ -137,7 +143,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-User=$SERVICE_USER
+User=root
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port $APP_PORT
@@ -153,6 +159,7 @@ systemctl daemon-reload
 systemctl enable -q "$SERVICE"
 systemctl restart "$SERVICE"
 systemctl is-enabled -q nginx || systemctl enable -q nginx
+id -u drebol &>/dev/null && userdel drebol 2>/dev/null || true
 systemctl is-enabled -q "$SERVICE" || die "Не удалось добавить $SERVICE в автозагрузку."
 ok "Сервис $SERVICE запущен и добавлен в автозагрузку (стартует сам после ребута)."
 
@@ -286,6 +293,7 @@ echo -e "  Пароль: ${C_B}${ADMIN_PASSWORD:-см. $APP_DIR/.env}${C_R}"
 echo -e "${C_G}============================================================${C_R}"
 echo -e "  Пароль также печатается в консоль при старте сайта:"
 echo -e "    ${C_Y}journalctl -u $SERVICE -n 50 --no-pager${C_R}"
+echo -e "  Папка:  ${C_B}$APP_DIR${C_R}"
 echo -e "  Автозагрузка: ${C_G}включена${C_R} — сайт поднимется сам после ребута"
 echo -e "  и перезапустится через 3 сек, если процесс упадёт."
 echo -e "  Управление:"
