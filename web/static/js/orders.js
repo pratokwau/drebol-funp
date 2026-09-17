@@ -4,6 +4,16 @@
   let nextFrom = null;
   let loading = false;
   let all = [];
+  let cashbackMin = 100;
+  // режим расчёта запоминаем в браузере
+  let mode = (() => {
+    try { return localStorage.getItem('drebol-orders-mode') || 'cashback'; } catch { return 'cashback'; }
+  })();
+
+  // прибыль и закуп в выбранном режиме
+  const pick = (o) => (mode === 'cashback' && o.profit_cashback !== null && o.profit_cashback !== undefined
+    ? { profit: o.profit_cashback, cost: o.cost_cashback, cb: o.cashback_used }
+    : { profit: o.profit, cost: o.cost, cb: false });
 
   const toast = (msg, kind = '') => {
     toastEl.textContent = msg;
@@ -32,7 +42,9 @@
     btn.disabled = on;
   };
 
-  const row = (o) => `
+  const row = (o) => {
+    const p = pick(o);
+    return `
     <a class="order" href="${esc(o.link)}" target="_blank" rel="noopener noreferrer">
       <span class="oid">#${esc(o.id)}</span>
       <span class="otitle">
@@ -42,12 +54,26 @@
       <span class="obuyer">${esc(o.buyer)}</span>
       <span class="ostatus st-${esc(o.status_code)}">${esc(o.status)}</span>
       <span class="oprice">${money(o.price)} ${esc(o.currency)}</span>
-      <span class="oprofit ${o.profit === null ? 'none' : o.profit >= 0 ? 'plus' : 'minus'}"
-            title="${o.matched ? `закуп: ${money(o.cost)} · товар «${esc(o.matched)}»` : 'товар не найден в мин. ценах'}">
-        ${o.profit === null ? '—' : (o.profit > 0 ? '+' : '') + money(o.profit)}
+      <span class="oprofit ${p.profit === null ? 'none' : p.profit >= 0 ? 'plus' : 'minus'}"
+            title="${o.matched
+              ? `закуп: ${money(p.cost)}${p.cb ? ' (с кэшбеком)' : ''} · товар «${esc(o.matched)}»`
+              : 'товар не найден в мин. ценах'}">
+        ${p.profit === null ? '—' : (p.profit > 0 ? '+' : '') + money(p.profit)}${p.cb ? '<span class="cbdot" title="учтён кэшбек">•</span>' : ''}
       </span>
       <span class="odate">${when(o.date)}</span>
     </a>`;
+  };
+
+  const paintFoot = () => {
+    if (!all.length) return;
+    const noMatch = all.filter((o) => o.profit === null).length;
+    const withCb = all.filter((o) => o.cashback_used).length;
+    const tail = (noMatch ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».` : '')
+      + (mode === 'cashback' && withCb ? ` С кэшбеком посчитано: ${withCb} (порог ${money(cashbackMin)}).` : '');
+    $('footHint').textContent = (nextFrom
+      ? `Показано ${all.length}. Есть ещё — жми кнопку.`
+      : `Это все заказы: ${all.length}.`) + tail;
+  };
 
   const render = () => {
     const q = $('filter').value.trim().toLowerCase();
@@ -68,11 +94,13 @@
     sumPill.textContent = `на сумму ${money(sum)} ${cur}`;
 
     const counted = shown.filter((o) => o.profit !== null && o.profit !== undefined);
-    const profit = counted.reduce((acc, o) => acc + o.profit, 0);
+    const profit = counted.reduce((acc, o) => acc + pick(o).profit, 0);
     const profitPill = $('profitPill');
     profitPill.hidden = !counted.length;
     profitPill.className = `pill ${profit >= 0 ? 'on' : 'off'}`;
     profitPill.textContent = `прибыль ${profit > 0 ? '+' : ''}${money(profit)} ${cur} (${counted.length} из ${shown.length})`;
+
+    paintFoot();
 
     const empty = $('empty');
     if (!all.length) {
@@ -106,16 +134,11 @@
 
       all = all.concat(data.orders);
       nextFrom = data.next;
+      if (data.cashback_min !== undefined) cashbackMin = data.cashback_min;
       render();
 
       $('moreBtn').hidden = !nextFrom;
-      const noMatch = all.filter((o) => o.profit === null).length;
-      const tail = noMatch
-        ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».`
-        : '';
-      $('footHint').textContent = (nextFrom
-        ? `Показано ${all.length}. Есть ещё — жми кнопку.`
-        : `Это все заказы: ${all.length}.`) + tail;
+      paintFoot();
       if (data.orders.length) toast(`+${data.orders.length} заказов`, 'good');
     } catch {
       $('footHint').innerHTML = '<span class="err">Сервер недоступен</span>';
@@ -136,6 +159,17 @@
   });
 
   $('filter').addEventListener('input', render);
+
+  document.querySelectorAll('[data-cb]').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.cb === mode);
+    tab.addEventListener('click', () => {
+      mode = tab.dataset.cb;
+      try { localStorage.setItem('drebol-orders-mode', mode); } catch { /* приватный режим */ }
+      document.querySelectorAll('[data-cb]').forEach((b) => b.classList.toggle('active', b.dataset.cb === mode));
+      render();
+      toast(mode === 'cashback' ? 'Считаю с кэшбеком' : 'Считаю без кэшбека');
+    });
+  });
 
   $('logout').addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });

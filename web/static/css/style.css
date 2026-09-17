@@ -516,3 +516,17 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 .mini-btn:hover{background:rgba(255,255,255,.09);color:var(--ink)}
 .game-head .check{margin-right:2px}
 .game.picked{border-color:rgba(124,92,255,.55);background:rgba(124,92,255,.08)}
+
+
+/* ---------- кэшбек ---------- */
+.fee-row{display:flex;gap:12px;flex-shrink:0}
+.pitem{grid-template-columns:minmax(0,1fr) 110px 120px 34px}
+.pkeys-sm{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+.pcost.cb.on{color:#4ade80}
+.pcost.cb.off{color:#ffc14d}
+.pcost.cb.none{color:var(--muted);font-weight:400}
+.orders-tools .tabs{flex-shrink:0}
+.cbdot{margin-left:5px;color:#4ade80;font-size:15px;line-height:1}
+@media (max-width:760px){
+  .pitem{grid-template-columns:minmax(0,1fr) 84px 96px 30px}
+}

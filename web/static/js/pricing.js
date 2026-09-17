@@ -1,7 +1,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const toastEl = $('toast');
-  let state = { fee: 3, games: [], items: {} };
+  let state = { fee: 3, cashbackMin: 100, games: [], items: {} };
   let found = [];          // результат сканирования
   let picked = new Set();  // выбранные в окне сканирования
   let openGame = null;     // раскрытая игра
@@ -39,13 +39,20 @@
 
   // ---------------------------- список игр ----------------------------
 
-  const itemRow = (item) => `
+  const itemRow = (item) => {
+    const cb = item.has_cashback && item.cost_cashback !== null && item.cost_cashback !== undefined;
+    const below = cb && Number(item.cost) < Number(state.cashbackMin);
+    return `
     <div class="pitem" data-id="${esc(item.id)}">
-      <span class="ptitle">${esc(item.title)}</span>
-      <span class="pkeys">${item.keywords ? esc(item.keywords) : ''}</span>
+      <span class="ptitle">${esc(item.title)}${item.keywords ? `<span class="pkeys-sm">${esc(item.keywords)}</span>` : ''}</span>
       <span class="pcost">${money(item.cost)}</span>
+      <span class="pcost cb ${cb ? (below ? 'off' : 'on') : 'none'}"
+            title="${below ? `закуп меньше порога ${money(state.cashbackMin)} ₽ — кэшбек не применяется` : ''}">
+        ${cb ? money(item.cost_cashback) + (below ? ' ⚠' : '') : '—'}
+      </span>
       <button class="mini danger" data-del="${esc(item.id)}" title="Удалить">×</button>
     </div>`;
+  };
 
   const gameCard = (game) => {
     const items = state.items[game.key] || [];
@@ -68,8 +75,8 @@
         <div class="game-body" ${open ? '' : 'hidden'}>
           <div class="pitem head">
             <span class="ptitle">Товар</span>
-            <span class="pkeys">Ключевые слова</span>
             <span class="pcost">Закуп</span>
+            <span class="pcost">С кэшбеком</span>
             <span></span>
           </div>
           <div class="pitems">${items.map(itemRow).join('') || '<p class="muted pad">Товаров пока нет.</p>'}</div>
@@ -78,6 +85,7 @@
             <input type="text" class="search" data-f="title" placeholder="Название товара (как в заказе)">
             <input type="text" class="search narrow" data-f="keywords" placeholder="Слова для поиска">
             <input type="text" class="search narrow" data-f="cost" inputmode="decimal" placeholder="Закуп">
+            <input type="text" class="search narrow" data-f="cost_cashback" inputmode="decimal" placeholder="С кэшбеком">
             <button class="btn primary" data-add="${esc(game.key)}"><span class="label">Добавить</span><span class="spinner"></span></button>
           </div>
 
@@ -105,17 +113,20 @@
 
   const render = () => {
     $('fee').value = state.fee;
+    $('cashbackMin').value = state.cashbackMin;
     $('games').innerHTML = state.games.map(gameCard).join('');
     paintBulk();
-    const total = Object.values(state.items).reduce((a, i) => a + i.length, 0);
+    const all = Object.values(state.items).flat();
+    const total = all.length;
+    const cb = all.filter((i) => i.has_cashback).length;
     $('gamesHint').textContent = state.games.length
-      ? `Игр: ${state.games.length}, товаров с ценой закупа: ${total}. Названия сопоставляются с заказами автоматически.`
+      ? `Игр: ${state.games.length}, товаров: ${total}, из них с кэшбеком: ${cb}. Кэшбек считается только когда закуп от ${money(state.cashbackMin)} ₽.`
       : 'Пока пусто. Нажми «Добавить игры с FunPay» — панель просканирует профиль и покажет твои разделы.';
   };
 
   const reload = async () => {
     const data = await api('/api/pricing');
-    state = { fee: data.fee, games: data.games, items: data.items };
+    state = { fee: data.fee, cashbackMin: data.cashback_min, games: data.games, items: data.items };
     render();
   };
 
@@ -290,10 +301,12 @@
       if (!get('title').trim()) { toast('Введи название товара', 'bad'); return; }
       busy(add, true);
       try {
+        const cashback = get('cost_cashback').trim();
         await api('/api/pricing/items', {
           method: 'POST',
           body: JSON.stringify({
             key, title: get('title'), keywords: get('keywords'), cost: get('cost') || '0',
+            cost_cashback: cashback, has_cashback: !!cashback,
           }),
         });
         await reload();
@@ -325,7 +338,8 @@
     if (save) {
       const box = save.closest('.lot');
       const key = save.dataset.savelot;
-      const cost = box.querySelector('input').value;
+      const cost = box.querySelector('[data-lf="cost"]').value;
+      const cashback = box.querySelector('[data-lf="cost_cashback"]').value.trim();
       if (!cost.trim()) { toast('Укажи закуп', 'bad'); return; }
       busy(save, true);
       try {
@@ -333,6 +347,7 @@
           method: 'POST',
           body: JSON.stringify({
             key, title: box.dataset.title, cost,
+            cost_cashback: cashback, has_cashback: !!cashback,
             lot_id: box.dataset.lot, price: Number(box.dataset.price),
           }),
         });
@@ -365,7 +380,8 @@
         <span class="lprice">${money(lot.price)} ${esc(lot.currency)}</span>
         ${alreadyAdded(lot.title || '', items)
           ? '<span class="pill on">уже в списке</span>'
-          : `<input type="text" class="search narrow" inputmode="decimal" placeholder="закуп">
+          : `<input type="text" class="search narrow" data-lf="cost" inputmode="decimal" placeholder="закуп">
+             <input type="text" class="search narrow" data-lf="cost_cashback" inputmode="decimal" placeholder="с кэшбеком">
              <button class="btn ghost-btn" data-savelot="${esc(key)}"><span class="label">Добавить</span><span class="spinner"></span></button>`}
       </div>`).join('') || '<p class="muted pad">Лотов в этом разделе нет.</p>';
   };
@@ -383,6 +399,24 @@
         });
         state.fee = data.fee;
         toast(`Комиссия ${data.fee}%`, 'good');
+      } catch (e) {
+        if (e.message !== 'auth') toast(e.message, 'bad');
+      }
+    }, 700);
+  });
+
+  let cbTimer = null;
+  $('cashbackMin').addEventListener('input', () => {
+    clearTimeout(cbTimer);
+    cbTimer = setTimeout(async () => {
+      try {
+        const data = await api('/api/pricing/cashback-min', {
+          method: 'POST',
+          body: JSON.stringify({ cashback_min: $('cashbackMin').value }),
+        });
+        state.cashbackMin = data.cashback_min;
+        render();
+        toast(`Кэшбек считается от ${money(data.cashback_min)} ₽`, 'good');
       } catch (e) {
         if (e.message !== 'auth') toast(e.message, 'bad');
       }

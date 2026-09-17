@@ -13,9 +13,10 @@ DATA_DIR = BASE_DIR / "data"
 FILE = DATA_DIR / "pricing.json"
 
 DEFAULTS: dict = {
-    "fee": 3.0,      # комиссия FunPay, %
-    "games": [],     # выбранные подкатегории профиля
-    "items": {},     # ключ игры -> список товаров с закупочной ценой
+    "fee": 3.0,            # комиссия FunPay, %
+    "cashback_min": 100.0,  # кэшбек в банке работает от этой суммы покупки
+    "games": [],           # выбранные подкатегории профиля
+    "items": {},           # ключ игры -> список товаров с закупочной ценой
 }
 
 _WORD_RE = re.compile(r"[^\w]+", re.UNICODE)
@@ -78,23 +79,30 @@ def remove_games(keys: list[str]) -> dict:
 
 
 def add_item(key: str, title: str, cost: float, keywords: str = "",
-             lot_id: str | int | None = None, price: float | None = None) -> dict:
+             lot_id: str | int | None = None, price: float | None = None,
+             cost_cashback: float | None = None, has_cashback: bool = False) -> dict:
     data = load()
     if not any(g["key"] == key for g in data["games"]):
         raise ValueError("Такой игры нет в списке")
 
+    fields = {
+        "cost": cost,
+        "cost_cashback": cost_cashback,
+        "has_cashback": bool(has_cashback and cost_cashback is not None),
+        "keywords": keywords.strip(),
+        "lot_id": lot_id,
+        "price": price,
+    }
+
     items = data["items"].setdefault(key, [])
     same = next((i for i in items if i["title"].strip().lower() == title.strip().lower()), None)
     if same:
-        same.update({"cost": cost, "keywords": keywords, "lot_id": lot_id, "price": price})
+        same.update(fields)
     else:
         items.append({
             "id": uuid.uuid4().hex[:12],
             "title": title.strip(),
-            "cost": cost,
-            "keywords": keywords.strip(),
-            "lot_id": lot_id,
-            "price": price,
+            **fields,
             "created_at": int(time.time()),
         })
     return save(data)
@@ -105,7 +113,8 @@ def update_item(item_id: str, fields: dict) -> dict:
     for items in data["items"].values():
         for item in items:
             if item["id"] == item_id:
-                item.update({k: v for k, v in fields.items() if k in ("title", "cost", "keywords")})
+                item.update({k: v for k, v in fields.items()
+                             if k in ("title", "cost", "keywords", "cost_cashback", "has_cashback")})
                 return save(data)
     raise ValueError("Товар не найден")
 
@@ -121,6 +130,24 @@ def set_fee(fee: float) -> dict:
     data = load()
     data["fee"] = fee
     return save(data)
+
+
+def set_cashback_min(value: float) -> dict:
+    data = load()
+    data["cashback_min"] = value
+    return save(data)
+
+
+def effective_cost(item: dict, cashback_min: float) -> tuple[float, bool]:
+    """Цена закупа с учётом кэшбека и порога. Возвращает (цена, кэшбек применён)."""
+    plain = float(item.get("cost") or 0)
+    cashback = item.get("cost_cashback")
+
+    if not item.get("has_cashback") or cashback is None:
+        return plain, False
+    if plain < cashback_min:       # покупка меньше порога — банк кэшбек не даст
+        return plain, False
+    return float(cashback), True
 
 
 # ---------------------------- сопоставление ----------------------------
@@ -170,26 +197,35 @@ def match(order_title: str, items: list[dict]) -> dict | None:
 
 
 def apply_to_orders(orders: list[dict]) -> list[dict]:
-    """Дополняет заказы себестоимостью и чистой прибылью."""
+    """Дополняет заказы себестоимостью и прибылью — сразу в двух вариантах:
+    по обычной цене закупа и по цене с кэшбеком."""
     data = load()
     items = _all_items(data)
     fee = float(data.get("fee") or 0) / 100
+    cashback_min = float(data.get("cashback_min") or 0)
 
     for order in orders:
         item = match(order.get("title", ""), items) if items else None
         price = float(order.get("price") or 0)
         net = price * (1 - fee)
-
-        if item:
-            amount = order.get("amount") or 1
-            cost = float(item.get("cost") or 0) * amount
-            order["cost"] = round(cost, 2)
-            order["profit"] = round(net - cost, 2)
-            order["matched"] = item["title"]
-        else:
-            order["cost"] = None
-            order["profit"] = None
-            order["matched"] = None
         order["net"] = round(net, 2)
+
+        if not item:
+            order.update({
+                "cost": None, "cost_cashback": None, "profit": None,
+                "profit_cashback": None, "cashback_used": False, "matched": None,
+            })
+            continue
+
+        amount = order.get("amount") or 1
+        plain = float(item.get("cost") or 0)
+        with_cb, used = effective_cost(item, cashback_min)
+
+        order["cost"] = round(plain * amount, 2)
+        order["cost_cashback"] = round(with_cb * amount, 2)
+        order["profit"] = round(net - plain * amount, 2)
+        order["profit_cashback"] = round(net - with_cb * amount, 2)
+        order["cashback_used"] = used
+        order["matched"] = item["title"]
 
     return orders

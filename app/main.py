@@ -118,6 +118,15 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
 
+@app.middleware("http")
+async def no_cache(request: Request, call_next):
+    """Браузер обязан переспрашивать файлы: иначе после обновления панели
+    остаётся старый js/css и интерфейс ведёт себя как до апдейта."""
+    response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
+    return response
+
+
 @app.get("/")
 async def index(request: Request):
     if verify(request.cookies.get(COOKIE_NAME)):
@@ -319,7 +328,9 @@ def api_orders(start_from: str = ""):
     result = funpay.orders(data["golden_key"], data["user_agent"], start_from.strip() or None)
     if result["ok"]:
         result["orders"] = pricing.apply_to_orders(result["orders"])
-        result["fee"] = pricing.load()["fee"]
+        settings_pricing = pricing.load()
+        result["fee"] = settings_pricing["fee"]
+        result["cashback_min"] = settings_pricing["cashback_min"]
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
@@ -332,6 +343,7 @@ def api_pricing_get():
     return {
         "ok": True,
         "fee": data["fee"],
+        "cashback_min": data["cashback_min"],
         "games": data["games"],
         "items": data["items"],
     }
@@ -401,12 +413,29 @@ async def api_pricing_add_item(request: Request):
     if cost < 0:
         return JSONResponse({"ok": False, "error": "Цена закупа не может быть отрицательной"}, status_code=400)
 
+    raw_cashback = str(body.get("cost_cashback") or "").strip()
+    cost_cashback = None
+    if raw_cashback:
+        try:
+            cost_cashback = float(raw_cashback.replace(",", "."))
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Цена с кэшбеком должна быть числом"}, status_code=400)
+        if cost_cashback < 0:
+            return JSONResponse({"ok": False, "error": "Цена с кэшбеком не может быть отрицательной"}, status_code=400)
+        if cost_cashback > cost:
+            return JSONResponse(
+                {"ok": False, "error": "Цена с кэшбеком должна быть меньше обычной"}, status_code=400)
+
+    has_cashback = bool(body.get("has_cashback")) and cost_cashback is not None
+
     try:
         data = pricing.add_item(
             key, title, cost,
             keywords=str(body.get("keywords") or ""),
             lot_id=body.get("lot_id"),
             price=body.get("price"),
+            cost_cashback=cost_cashback,
+            has_cashback=has_cashback,
         )
     except ValueError as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
@@ -429,3 +458,15 @@ async def api_pricing_fee(request: Request):
     if not 0 <= fee < 100:
         return JSONResponse({"ok": False, "error": "Комиссия должна быть от 0 до 100"}, status_code=400)
     return {"ok": True, "fee": pricing.set_fee(fee)["fee"]}
+
+
+@app.post("/api/pricing/cashback-min", dependencies=[Depends(require_auth)])
+async def api_pricing_cashback_min(request: Request):
+    body = await request.json()
+    try:
+        value = float(str(body.get("cashback_min")).replace(",", "."))
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Порог должен быть числом"}, status_code=400)
+    if value < 0:
+        return JSONResponse({"ok": False, "error": "Порог не может быть отрицательным"}, status_code=400)
+    return {"ok": True, "cashback_min": pricing.set_cashback_min(value)["cashback_min"]}
