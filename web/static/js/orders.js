@@ -49,16 +49,21 @@
       <span class="oid">#${esc(o.id)}</span>
       <span class="otitle">
         ${esc(o.title) || '<span class="muted">без описания</span>'}
-        <span class="ocat">${esc(o.category || '')}${o.amount && o.amount > 1 ? ` · ${o.amount} шт` : ''}</span>
+        <span class="ocat">${esc(o.category || '')}${o.amount && o.amount > 1 ? ` · ${o.amount} шт` : ''}${
+          o.matched ? ` · закуп по «${esc(o.matched)}»` : ''}</span>
       </span>
       <span class="obuyer">${esc(o.buyer)}</span>
       <span class="ostatus st-${esc(o.status_code)}">${esc(o.status)}</span>
       <span class="oprice">${money(o.price)} ${esc(o.currency)}</span>
-      <span class="oprofit ${p.profit === null ? 'none' : p.profit >= 0 ? 'plus' : 'minus'}"
+      <span class="oprofit ${p.profit === null ? 'none' : !p.cost ? 'warn' : p.profit >= 0 ? 'plus' : 'minus'}"
             title="${o.matched
-              ? `закуп: ${money(p.cost)}${p.cb ? ' (с кэшбеком)' : ''} · товар «${esc(o.matched)}»`
+              ? (!p.cost
+                  ? `у товара «${esc(o.matched)}» не задан закуп — прибыль показана как вся сумма`
+                  : `закуп: ${money(p.cost)}${p.cb ? ' (с кэшбеком)' : ''} · товар «${esc(o.matched)}»`)
               : 'товар не найден в мин. ценах'}">
-        ${p.profit === null ? '—' : (p.profit > 0 ? '+' : '') + money(p.profit)}${p.cb ? '<span class="cbdot" title="учтён кэшбек">•</span>' : ''}
+        ${p.profit === null ? '—' : (p.profit > 0 ? '+' : '') + money(p.profit)}${
+          p.cb ? '<span class="cbdot" title="учтён кэшбек">•</span>' : ''}${
+          o.matched && !p.cost ? '<span class="warndot" title="закуп не задан">⚠</span>' : ''}
       </span>
       <span class="odate">${when(o.date)}</span>
     </a>`;
@@ -68,7 +73,9 @@
     if (!all.length) return;
     const noMatch = all.filter((o) => o.profit === null).length;
     const withCb = all.filter((o) => o.cashback_used).length;
+    const zeroCost = all.filter((o) => o.matched && !pick(o).cost).length;
     const tail = (noMatch ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».` : '')
+      + (zeroCost ? ` С нулевым закупом: ${zeroCost} — проставь цены в «Мин. ценах».` : '')
       + (mode === 'cashback' && withCb ? ` С кэшбеком посчитано: ${withCb} (порог ${money(cashbackMin)}).` : '');
     $('footHint').textContent = (nextFrom
       ? `Показано ${all.length}. Есть ещё — жми кнопку.`

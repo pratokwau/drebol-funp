@@ -20,6 +20,8 @@ DEFAULTS: dict = {
 }
 
 _WORD_RE = re.compile(r"[^\w]+", re.UNICODE)
+# слова и числа по отдельности: «170шт» -> ["170", "шт"]
+_TOKEN_RE = re.compile(r"\d+|[^\W\d_]+", re.UNICODE)
 
 
 def load() -> dict:
@@ -157,9 +159,23 @@ def normalize(text: str) -> str:
     return _WORD_RE.sub(" ", (text or "").lower()).strip()
 
 
-def squash(text: str) -> str:
-    """Та же строка без пробелов: «170 шт» и «170шт» должны совпадать."""
-    return normalize(text).replace(" ", "")
+def tokens(text: str) -> list[str]:
+    """Разбивает название на слова и числа.
+
+    «Гемы 170шт» и «гемы 170 шт» дают одинаковые токены, а «50» и «500»
+    остаются разными — иначе закуп от «500 голосов» цеплялся бы к «50 голосов».
+    """
+    return _TOKEN_RE.findall(normalize(text))
+
+
+def _contains(haystack: list[str], needle: list[str]) -> bool:
+    """Идут ли токены needle подряд внутри haystack."""
+    if not needle or len(needle) > len(haystack):
+        return False
+    for i in range(len(haystack) - len(needle) + 1):
+        if haystack[i:i + len(needle)] == needle:
+            return True
+    return False
 
 
 def _all_items(data: dict) -> list[dict]:
@@ -172,23 +188,21 @@ def _all_items(data: dict) -> list[dict]:
 
 def match(order_title: str, items: list[dict]) -> dict | None:
     """Ищет товар, подходящий под название заказа. Побеждает самое точное совпадение."""
-    target = normalize(order_title)
-    target_sq = squash(order_title)
+    target = tokens(order_title)
     if not target:
         return None
 
     best, best_score = None, 0
     for item in items:
-        title, title_sq = normalize(item["title"]), squash(item["title"])
-        words = [w for w in normalize(item.get("keywords", "")).split() if w]
+        title = tokens(item["title"])
+        keys = tokens(item.get("keywords", ""))
 
         score = 0
-        if title and title in target:
-            score = len(title)
-        elif title_sq and title_sq in target_sq:
-            score = len(title_sq)
-        elif words and all(squash(w) in target_sq for w in words):
-            score = sum(len(w) for w in words)
+        if _contains(target, title):
+            # чем длиннее совпавшее название, тем оно точнее
+            score = sum(len(t) for t in title) + len(title)
+        elif keys and all(k in target for k in keys):
+            score = sum(len(k) for k in keys)
 
         if score > best_score:
             best, best_score = item, score

@@ -42,10 +42,11 @@
   const itemRow = (item) => {
     const cb = item.has_cashback && item.cost_cashback !== null && item.cost_cashback !== undefined;
     const below = cb && Number(item.cost) < Number(state.cashbackMin);
+    const noCost = !Number(item.cost);
     return `
     <div class="pitem" data-id="${esc(item.id)}">
       <span class="ptitle">${esc(item.title)}${item.keywords ? `<span class="pkeys-sm">${esc(item.keywords)}</span>` : ''}</span>
-      <span class="pcost">${money(item.cost)}</span>
+      <span class="pcost ${noCost ? 'zero' : ''}" title="${noCost ? 'закуп не задан — прибыль считается как вся сумма' : ''}">${noCost ? 'не задан' : money(item.cost)}</span>
       <span class="pcost cb ${cb ? (below ? 'off' : 'on') : 'none'}"
             title="${below ? `закуп меньше порога ${money(state.cashbackMin)} ₽ — кэшбек не применяется` : ''}">
         ${cb ? money(item.cost_cashback) + (below ? ' ⚠' : '') : '—'}
@@ -119,8 +120,10 @@
     const all = Object.values(state.items).flat();
     const total = all.length;
     const cb = all.filter((i) => i.has_cashback).length;
+    const empty = all.filter((i) => !Number(i.cost)).length;
     $('gamesHint').textContent = state.games.length
-      ? `Игр: ${state.games.length}, товаров: ${total}, из них с кэшбеком: ${cb}. Кэшбек считается только когда закуп от ${money(state.cashbackMin)} ₽.`
+      ? `Игр: ${state.games.length}, товаров: ${total}, с кэшбеком: ${cb}${empty ? `, без закупа: ${empty}` : ''}.`
+        + ` Кэшбек считается только когда закуп от ${money(state.cashbackMin)} ₽.`
       : 'Пока пусто. Нажми «Добавить игры с FunPay» — панель просканирует профиль и покажет твои разделы.';
   };
 
@@ -361,14 +364,20 @@
     }
   });
 
-  // та же нормализация, что и на сервере: «Гемы 170шт» ⊂ «Brawl Stars | Гемы 170шт»
-  const norm = (v) => String(v ?? '').toLowerCase().replace(/[^\wа-яё]+/gi, ' ').trim();
-  const squash = (v) => norm(v).replace(/ /g, '');
-  const alreadyAdded = (lotTitle, items) =>
-    items.some((i) => {
-      const a = squash(i.title), b = squash(lotTitle);
-      return a && b && (b.includes(a) || a.includes(b));
+  // та же логика, что на сервере: сравниваем токены, числа — целиком,
+  // иначе «50 голосов» цепляется к «500 голосов»
+  const tokens = (v) => String(v ?? '').toLowerCase().match(/\d+|[^\W\d_]+/gu) || [];
+  const contains = (hay, needle) => {
+    if (!needle.length || needle.length > hay.length) return false;
+    return hay.some((_, i) => needle.every((t, j) => hay[i + j] === t));
+  };
+  const alreadyAdded = (lotTitle, items) => {
+    const lot = tokens(lotTitle);
+    return items.some((i) => {
+      const it = tokens(i.title);
+      return contains(lot, it) || contains(it, lot);
     });
+  };
 
   const renderLots = (key) => {
     const box = document.querySelector(`[data-lotsbox="${key}"]`);

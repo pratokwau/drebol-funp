@@ -530,3 +530,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 @media (max-width:760px){
   .pitem{grid-template-columns:minmax(0,1fr) 84px 96px 30px}
 }
+
+.pcost.zero{color:#ffc14d;font-weight:500;font-size:12.5px}
+.order .oprofit.warn{color:#ffc14d}
+.warndot{margin-left:5px;color:#ffc14d;font-size:12px}
