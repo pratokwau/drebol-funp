@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>drebol-funp — настройки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-page">
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid"></div>
+    <div class="noise"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="logo small">
+      <span class="logo-mark">DF</span>
+      <h1>drebol<span>funp</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="/">Панель</a>
+      <a href="/settings" class="active">Настройки</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="user" id="user">admin</span>
+      <button class="ghost" id="logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <section class="panel" style="--i:1">
+      <div class="panel-head">
+        <div>
+          <h2>Аккаунт FunPay</h2>
+          <p class="muted">Ключ берётся из cookie <code>golden_key</code> на funpay.com, user-agent — из того же браузера.</p>
+        </div>
+        <span class="pill" id="fpStatus">не подключён</span>
+      </div>
+
+      <div class="field lite" style="--i:2">
+        <input type="password" id="goldenKey" placeholder=" " autocomplete="off" spellcheck="false">
+        <label for="goldenKey">Golden key</label>
+        <button type="button" class="eye" id="eyeKey" aria-label="Показать ключ">
+          <svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <p class="tip" id="keyHint"></p>
+
+      <div class="field lite" style="--i:3">
+        <input type="text" id="userAgent" placeholder=" " autocomplete="off" spellcheck="false">
+        <label for="userAgent">User-Agent</label>
+      </div>
+      <p class="tip">Должен совпадать с браузером, в котором ты залогинен на FunPay — иначе сессию выкинет.</p>
+
+      <div class="actions" style="--i:4">
+        <button class="btn primary" id="saveBtn"><span class="label">Сохранить</span><span class="spinner"></span></button>
+        <button class="btn ghost-btn" id="checkBtn"><span class="label">Проверить ключ</span><span class="spinner"></span></button>
+        <button class="btn danger" id="clearBtn">Удалить ключ</button>
+        <button class="btn ghost-btn" id="uaResetBtn">Стандартный UA</button>
+      </div>
+
+      <div class="result" id="fpResult"></div>
+    </section>
+
+    <section class="panel" style="--i:5">
+      <div class="panel-head">
+        <div>
+          <h2>Обновление с GitHub</h2>
+          <p class="muted">Забирает свежий код из репозитория, ставит зависимости и перезапускает сайт.</p>
+        </div>
+        <span class="pill" id="verPill">версия —</span>
+      </div>
+
+      <div class="version" id="verBox">
+        <span class="muted">загружаю версию...</span>
+      </div>
+
+      <div class="actions">
+        <button class="btn ghost-btn" id="checkUpdBtn"><span class="label">Проверить обновления</span><span class="spinner"></span></button>
+        <button class="btn primary" id="updBtn"><span class="label">Обновить и перезапустить</span><span class="spinner"></span></button>
+      </div>
+
+      <div class="result" id="updResult"></div>
+      <pre class="log" id="updLog" hidden></pre>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/settings.js"></script>
+</body>
+</html>

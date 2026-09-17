@@ -244,6 +244,7 @@ else
   rm -rf "$APP_DIR"
   git clone -q "$REPO_URL" "$APP_DIR"
 fi
+chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
 ok "Код на месте."
 
 log "Ставлю python-зависимости..."

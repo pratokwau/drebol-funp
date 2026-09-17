@@ -176,7 +176,97 @@ body.auth-page{display:grid;place-items:center;padding:24px}
 .tile{transition:transform .25s,border-color .25s}
 .tile:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.45)}
 .tile h3{font-size:14px;font-weight:600;margin-bottom:8px}
+a.tile{display:block;text-decoration:none;color:inherit}
 .muted{color:var(--muted);font-size:13px}
 
 @media (max-width:480px){.card{padding:32px 24px 26px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- навигация ---------- */
+.nav{display:flex;gap:4px;margin-left:auto;margin-right:18px}
+.nav a{
+  color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;
+  padding:8px 14px;border-radius:10px;transition:color .2s,background .2s;
+}
+.nav a:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+.nav a.active{color:var(--ink);background:rgba(124,92,255,.16);box-shadow:inset 0 0 0 1px rgba(124,92,255,.35)}
+
+/* ---------- секции настроек ---------- */
+.content > .panel + .panel{margin-top:20px}
+.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+.panel-head p{margin-top:4px;max-width:62ch}
+code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;background:rgba(255,255,255,.06);padding:2px 6px;border-radius:6px}
+.pill{
+  flex-shrink:0;font-size:12px;padding:6px 12px;border-radius:999px;
+  background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);
+  transition:background .3s,color .3s,border-color .3s;
+}
+.pill.on{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.4);color:#4ade80}
+.pill.off{background:rgba(255,85,112,.12);border-color:rgba(255,85,112,.35);color:#ff8095}
+
+.field.lite input{height:54px;padding:20px 44px 6px 14px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px}
+.field.lite label{top:16px;font-family:'Inter',sans-serif}
+.field.lite input:focus + label,
+.field.lite input:not(:placeholder-shown) + label{top:7px;font-size:10.5px}
+.tip{font-size:12px;color:var(--muted);margin:-8px 2px 18px}
+
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.btn{
+  position:relative;height:42px;padding:0 18px;border:0;border-radius:11px;cursor:pointer;
+  font-family:inherit;font-size:13.5px;font-weight:600;color:#fff;
+  transition:transform .18s,box-shadow .25s,background .25s,opacity .2s;
+}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{cursor:wait;opacity:.65;transform:none}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#4f46e5 60%,var(--accent-2));background-size:200% 200%;box-shadow:0 10px 26px rgba(79,70,229,.32)}
+.btn.primary:hover{background-position:100% 50%}
+.btn.ghost-btn{background:var(--glass);border:1px solid var(--line);color:var(--ink)}
+.btn.ghost-btn:hover{background:rgba(255,255,255,.08)}
+.btn.danger{background:rgba(255,85,112,.14);border:1px solid rgba(255,85,112,.32);color:#ff8095}
+.btn.danger:hover{background:rgba(255,85,112,.22)}
+.btn .spinner{
+  position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
+  border:2px solid rgba(255,255,255,.28);border-top-color:#fff;border-radius:50%;opacity:0;
+}
+.btn.loading .label{opacity:0}
+.btn.loading .spinner{opacity:1;animation:spin .7s linear infinite}
+
+.result{
+  max-height:0;overflow:hidden;font-size:13.5px;line-height:1.55;
+  transition:max-height .35s ease,margin .3s ease;
+}
+.result.show{max-height:320px;margin-top:18px}
+.result .box{padding:14px 16px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);animation:rise .4s both}
+.result .box.good{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.08)}
+.result .box.bad{border-color:rgba(255,85,112,.35);background:rgba(255,85,112,.08);color:#ff9aab}
+.result b{font-weight:600}
+
+.version{
+  display:flex;flex-wrap:wrap;gap:10px 26px;padding:14px 16px;margin-bottom:18px;
+  border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025);font-size:13px;
+}
+.version .k{color:var(--muted);margin-right:6px}
+.version .v{font-family:'JetBrains Mono',ui-monospace,monospace}
+
+.log{
+  margin-top:16px;max-height:280px;overflow:auto;padding:14px 16px;
+  border:1px solid var(--line);border-radius:12px;background:rgba(0,0,0,.45);
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;line-height:1.6;
+  color:#c8ccda;white-space:pre-wrap;word-break:break-word;
+}
+.commits{margin:10px 0 0;padding-left:18px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--muted)}
+.commits li{margin:3px 0}
+
+/* ---------- всплывашка ---------- */
+.toast{
+  position:fixed;left:50%;bottom:28px;z-index:50;
+  transform:translate(-50%,24px);opacity:0;pointer-events:none;
+  padding:12px 20px;border-radius:12px;font-size:13.5px;font-weight:500;
+  background:rgba(22,22,28,.96);border:1px solid var(--line);
+  box-shadow:0 18px 44px rgba(0,0,0,.6);backdrop-filter:blur(12px);
+  transition:opacity .3s,transform .3s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.good{border-color:rgba(34,197,94,.45)}
+.toast.bad{border-color:rgba(255,85,112,.45)}

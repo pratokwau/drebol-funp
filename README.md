@@ -48,6 +48,23 @@ curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.s
 journalctl -u drebol-funp -n 50 --no-pager
 ```
 
+## Настройки
+
+Раздел «Настройки» в панели:
+
+- **Golden key** — из cookie `golden_key` на funpay.com. Сохраняется в
+  `data/settings.json` (права 600), в интерфейсе показывается замаскированным.
+  Кнопка «Проверить ключ» заходит с ним на FunPay и показывает, чей это аккаунт
+  и какой баланс.
+- **User-Agent** — должен совпадать с браузером, из которого взят ключ, иначе
+  FunPay выкинет сессию. Кнопка «Стандартный UA» подставляет дефолтный.
+- **Обновление с GitHub** — показывает текущий коммит, проверяет новые
+  (`git fetch`), а по кнопке забирает их, ставит зависимости и перезапускает
+  сервис. Лог обновления виден прямо на странице.
+
+Обновление делает `git reset --hard` до состояния репозитория: локальные правки
+в папке панели уезжают в `git stash`, а `.env`, `data/` и `venv/` не трогаются.
+
 ## Что ставится
 
 - `/root/drebol-funp` — код и виртуальное окружение (права 700, сервис работает от root)
@@ -55,6 +72,7 @@ journalctl -u drebol-funp -n 50 --no-pager
 - `drebol-funp.service` — systemd-сервис: `systemctl enable` при установке, автостарт после ребута, рестарт через 3 сек при падении
 - nginx-конфиг `/etc/nginx/sites-available/drebol-funp` — слушает твой порт, проксирует на приложение
 - certbot с автопродлением сертификата
+- `/root/drebol-funp/data/` — настройки FunPay и лог обновлений (в git не попадает)
 
 ## Управление
 
@@ -87,8 +105,13 @@ Python 3 + FastAPI + uvicorn, nginx, certbot, systemd. Фронтенд — ст
 
 ```
 install.sh          установщик для Ubuntu
-app/main.py         бэкенд: авторизация, сессии, API
+scripts/update.sh   обновление с GitHub + перезапуск сервиса
+app/main.py         бэкенд: авторизация, сессии, роуты
+app/store.py        настройки панели (data/settings.json)
+app/funpay.py       проверка golden_key через funpay.com
+app/updater.py      версия, проверка и запуск обновления
 web/index.html      страница входа
 web/dashboard.html  панель
+web/settings.html   настройки
 web/static/         css и js
 ```

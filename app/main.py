@@ -10,9 +10,11 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request, Response
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
+from . import funpay, store, updater
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
@@ -123,6 +125,18 @@ async def index(request: Request):
     return FileResponse(WEB_DIR / "index.html")
 
 
+def require_auth(request: Request) -> None:
+    if not verify(request.cookies.get(COOKIE_NAME)):
+        raise HTTPException(status_code=401, detail="Нужен вход")
+
+
+@app.get("/settings")
+async def settings_page(request: Request):
+    if not verify(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(WEB_DIR / "settings.html")
+
+
 @app.get("/login")
 async def login_page(request: Request):
     if verify(request.cookies.get(COOKIE_NAME)):
@@ -179,3 +193,81 @@ async def api_me(request: Request):
 @app.get("/api/health")
 async def health():
     return {"ok": True, "service": "drebol-funp"}
+
+
+# ---------------------------- настройки FunPay ----------------------------
+
+
+@app.get("/api/settings", dependencies=[Depends(require_auth)])
+async def api_settings_get():
+    data = store.load()
+    return {
+        "ok": True,
+        "has_key": bool(data["golden_key"]),
+        "key_mask": store.mask(data["golden_key"]),
+        "user_agent": data["user_agent"],
+        "default_user_agent": store.DEFAULT_UA,
+        "updated_at": data["updated_at"],
+    }
+
+
+@app.post("/api/settings", dependencies=[Depends(require_auth)])
+async def api_settings_save(
+    golden_key: str = Form(""),
+    user_agent: str = Form(""),
+    clear_key: str = Form(""),
+):
+    data = store.load()
+
+    if clear_key == "1":
+        data["golden_key"] = ""
+    elif golden_key.strip():
+        key = golden_key.strip()
+        if len(key) < 20:
+            return JSONResponse(
+                {"ok": False, "error": "Golden key слишком короткий — проверь, что скопировал целиком"},
+                status_code=400,
+            )
+        data["golden_key"] = key
+
+    data["user_agent"] = user_agent.strip() or store.DEFAULT_UA
+    store.save(data)
+    return {
+        "ok": True,
+        "has_key": bool(data["golden_key"]),
+        "key_mask": store.mask(data["golden_key"]),
+        "user_agent": data["user_agent"],
+    }
+
+
+@app.post("/api/settings/check", dependencies=[Depends(require_auth)])
+def api_settings_check(golden_key: str = Form(""), user_agent: str = Form("")):
+    data = store.load()
+    key = golden_key.strip() or data["golden_key"]
+    ua = user_agent.strip() or data["user_agent"]
+    result = funpay.check_key(key, ua)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+# ---------------------------- обновление с GitHub ----------------------------
+
+
+@app.get("/api/version", dependencies=[Depends(require_auth)])
+def api_version():
+    return updater.version()
+
+
+@app.post("/api/update/check", dependencies=[Depends(require_auth)])
+def api_update_check():
+    return updater.check()
+
+
+@app.post("/api/update/run", dependencies=[Depends(require_auth)])
+def api_update_run():
+    result = updater.start()
+    return JSONResponse(result, status_code=200 if result["ok"] else 409)
+
+
+@app.get("/api/update/log", dependencies=[Depends(require_auth)])
+def api_update_log():
+    return updater.log_tail()
