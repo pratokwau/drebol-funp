@@ -46,17 +46,22 @@ journalctl -u drebol-funp -n 50 --no-pager
 
 - `/opt/drebol-funp` — код и виртуальное окружение
 - `/opt/drebol-funp/.env` — логин, пароль, адрес сайта, секретный ключ (права 600)
-- `drebol-funp.service` — systemd-сервис, автозапуск и рестарт при падении
+- `drebol-funp.service` — systemd-сервис: `systemctl enable` при установке, автостарт после ребута, рестарт через 3 сек при падении
 - nginx-конфиг `/etc/nginx/sites-available/drebol-funp` — слушает твой порт, проксирует на приложение
 - certbot с автопродлением сертификата
 
 ## Управление
 
 ```bash
-systemctl status drebol-funp     # состояние
-systemctl restart drebol-funp    # перезапуск
-journalctl -u drebol-funp -f     # живой лог
+systemctl status drebol-funp      # состояние
+systemctl restart drebol-funp     # перезапуск
+systemctl is-enabled drebol-funp  # автозагрузка (должно быть enabled)
+journalctl -u drebol-funp -f      # живой лог
 ```
+
+Автозагрузка включается установщиком сама: сервер перезагрузился — сайт поднялся
+без тебя; процесс упал — systemd перезапустит его через 3 секунды, сколько бы раз
+это ни повторилось. Выключить автостарт: `systemctl disable drebol-funp`.
 
 Сменить пароль: отредактировать `ADMIN_PASSWORD` в `/opt/drebol-funp/.env`
 и перезапустить сервис.

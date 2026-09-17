@@ -130,7 +130,10 @@ log "Настраиваю systemd-сервис..."
 cat > "/etc/systemd/system/$SERVICE.service" <<EOF
 [Unit]
 Description=drebol-funp web panel
-After=network.target
+Wants=network-online.target
+After=network-online.target nginx.service
+# не сдаваться после серии быстрых падений — перезапускать бесконечно
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -149,7 +152,9 @@ EOF
 systemctl daemon-reload
 systemctl enable -q "$SERVICE"
 systemctl restart "$SERVICE"
-ok "Сервис запущен."
+systemctl is-enabled -q nginx || systemctl enable -q nginx
+systemctl is-enabled -q "$SERVICE" || die "Не удалось добавить $SERVICE в автозагрузку."
+ok "Сервис $SERVICE запущен и добавлен в автозагрузку (стартует сам после ребута)."
 
 # ---------- nginx ----------
 mkdir -p "$WEBROOT"
@@ -281,6 +286,9 @@ echo -e "  Пароль: ${C_B}${ADMIN_PASSWORD:-см. $APP_DIR/.env}${C_R}"
 echo -e "${C_G}============================================================${C_R}"
 echo -e "  Пароль также печатается в консоль при старте сайта:"
 echo -e "    ${C_Y}journalctl -u $SERVICE -n 50 --no-pager${C_R}"
+echo -e "  Автозагрузка: ${C_G}включена${C_R} — сайт поднимется сам после ребута"
+echo -e "  и перезапустится через 3 сек, если процесс упадёт."
 echo -e "  Управление:"
 echo -e "    ${C_Y}systemctl restart|stop|status $SERVICE${C_R}"
+echo -e "    ${C_Y}systemctl is-enabled $SERVICE${C_R}   # проверить автозагрузку"
 echo
