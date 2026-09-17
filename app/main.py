@@ -137,6 +137,13 @@ async def settings_page(request: Request):
     return FileResponse(WEB_DIR / "settings.html")
 
 
+@app.get("/calc")
+async def calc_page(request: Request):
+    if not verify(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(WEB_DIR / "calc.html")
+
+
 @app.get("/login")
 async def login_page(request: Request):
     if verify(request.cookies.get(COOKIE_NAME)):

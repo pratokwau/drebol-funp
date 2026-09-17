@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>drebol-funp — калькулятор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-page">
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid"></div>
+    <div class="noise"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="logo small">
+      <span class="logo-mark">DF</span>
+      <h1>drebol<span>funp</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="/">Панель</a>
+      <a href="/calc" class="active">Калькулятор</a>
+      <a href="/settings">Настройки</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="user" id="user">admin</span>
+      <button class="ghost" id="logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <section class="panel" style="--i:1">
+      <div class="panel-head">
+        <div>
+          <h2>Калькулятор прибыли</h2>
+          <p class="muted">Комиссия FunPay снимается с цены продажи. Считает на лету, ничего нажимать не нужно.</p>
+        </div>
+        <div class="tabs" id="tabs">
+          <button class="tab active" data-mode="profit">Прибыль от цены</button>
+          <button class="tab" data-mode="price">Цена от прибыли</button>
+        </div>
+      </div>
+
+      <div class="calc-grid">
+        <div class="field lite"><input type="text" inputmode="decimal" id="cost" placeholder=" "><label for="cost">Цена товара (закуп)</label></div>
+        <div class="field lite" id="sellWrap"><input type="text" inputmode="decimal" id="sell" placeholder=" "><label for="sell">Цена продажи</label></div>
+        <div class="field lite" id="wantWrap" hidden><input type="text" inputmode="decimal" id="want" placeholder=" "><label for="want">Желаемая прибыль</label></div>
+        <div class="field lite"><input type="text" inputmode="decimal" id="fee" placeholder=" "><label for="fee">Комиссия, %</label></div>
+        <div class="field lite"><input type="text" inputmode="decimal" id="qty" placeholder=" "><label for="qty">Количество, шт</label></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn ghost-btn" id="resetBtn">Сбросить</button>
+        <button class="btn ghost-btn" id="copyBtn">Скопировать расчёт</button>
+      </div>
+    </section>
+
+    <section class="panel" style="--i:2">
+      <h2 class="calc-title">📊 Результаты расчёта</h2>
+      <div class="calc-out" id="out">
+        <div class="line"><span class="ico">🛒</span><span class="k">Цена товара:</span><span class="v" id="rCost">—</span></div>
+        <div class="line"><span class="ico">💰</span><span class="k">Цена продажи:</span><span class="v" id="rSell">—</span></div>
+        <div class="line"><span class="ico">🏦</span><span class="k">Комиссия:</span><span class="v" id="rFee">—</span></div>
+        <div class="line profit" id="profitLine"><span class="ico">💎</span><span class="k">Чистая прибыль:</span><span class="v" id="rProfit">—</span><span class="ico">💎</span></div>
+      </div>
+
+      <div class="calc-extra" id="extra">
+        <div class="ex"><span class="t">Комиссия в деньгах</span><span class="n" id="xFee">—</span></div>
+        <div class="ex"><span class="t">Придёт на баланс</span><span class="n" id="xNet">—</span></div>
+        <div class="ex"><span class="t">Наценка к закупу</span><span class="n" id="xMargin">—</span></div>
+        <div class="ex"><span class="t">Цена в ноль</span><span class="n" id="xBreak">—</span></div>
+      </div>
+
+      <p class="tip" id="hint"></p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/calc.js"></script>
+</body>
+</html>
