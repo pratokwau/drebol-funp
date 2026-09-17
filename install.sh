@@ -315,9 +315,12 @@ Type=simple
 User=root
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
+# знак "-" — если скрипта нет, старт всё равно продолжится
+ExecStartPre=-/bin/bash $APP_DIR/scripts/ensure-venv.sh $APP_DIR
 ExecStart=$APP_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port $APP_PORT
 Restart=always
 RestartSec=3
+TimeoutStartSec=600
 StandardOutput=journal
 StandardError=journal
 

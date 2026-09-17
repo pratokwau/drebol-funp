@@ -131,9 +131,11 @@ Type=simple
 User=root
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
+ExecStartPre=-/bin/bash $APP_DIR/scripts/ensure-venv.sh $APP_DIR
 ExecStart=$APP_DIR/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port $port
 Restart=always
 RestartSec=3
+TimeoutStartSec=600
 StandardOutput=journal
 StandardError=journal
 
@@ -144,6 +146,14 @@ UNIT
   systemctl enable -q "$SERVICE"
   say "Юнит пересоздан (порт приложения $port)."
 }
+
+# юнит мог остаться от старой версии — обновляем его вместе с кодом
+if systemctl cat "$SERVICE" 2>/dev/null | grep -q "ExecStart="; then
+  if ! systemctl cat "$SERVICE" 2>/dev/null | grep -q "ensure-venv.sh"; then
+    say "Обновляю systemd-юнит (добавляю самопроверку venv)..."
+    restore_unit || say "Не вышло обновить юнит — не страшно, работаем со старым."
+  fi
+fi
 
 if ! systemctl cat "$SERVICE" >/dev/null 2>&1; then
   say "ВНИМАНИЕ: systemd не знает сервис $SERVICE — файл юнита пропал. Пересоздаю..."
