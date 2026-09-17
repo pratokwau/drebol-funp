@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>drebol-funp — заказы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-page">
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid"></div>
+    <div class="noise"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="logo small">
+      <span class="logo-mark">DF</span>
+      <h1>drebol<span>funp</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="/">Панель</a>
+      <a href="/orders" class="active">Заказы</a>
+      <a href="/calc">Калькулятор</a>
+      <a href="/settings">Настройки</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="user" id="user">admin</span>
+      <button class="ghost" id="logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="content wide">
+    <section class="panel" style="--i:1">
+      <div class="panel-head">
+        <div>
+          <h2>Заказы</h2>
+          <p class="muted">Продажи с FunPay, по 100 штук за раз. Долистай вниз и нажми «Загрузить ещё».</p>
+        </div>
+        <div class="orders-sum">
+          <span class="pill" id="cntPill">загружено 0</span>
+          <span class="pill" id="sumPill" hidden>на сумму —</span>
+        </div>
+      </div>
+
+      <div class="orders-tools">
+        <input type="search" id="filter" class="search" placeholder="Фильтр по загруженным: товар, покупатель, № заказа">
+        <button class="btn ghost-btn" id="reloadBtn"><span class="label">Обновить</span><span class="spinner"></span></button>
+      </div>
+
+      <div class="orders" id="list"></div>
+
+      <div class="orders-empty" id="empty" hidden></div>
+
+      <div class="orders-foot">
+        <button class="btn primary" id="moreBtn" hidden><span class="label">Загрузить ещё 100</span><span class="spinner"></span></button>
+        <p class="tip" id="footHint"></p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/orders.js"></script>
+</body>
+</html>

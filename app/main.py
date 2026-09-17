@@ -137,6 +137,13 @@ async def settings_page(request: Request):
     return FileResponse(WEB_DIR / "settings.html")
 
 
+@app.get("/orders")
+async def orders_page(request: Request):
+    if not verify(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(WEB_DIR / "orders.html")
+
+
 @app.get("/calc")
 async def calc_page(request: Request):
     if not verify(request.cookies.get(COOKIE_NAME)):
@@ -293,3 +300,14 @@ def api_update_run():
 @app.get("/api/update/log", dependencies=[Depends(require_auth)])
 def api_update_log():
     return updater.log_tail()
+
+
+# ---------------------------- заказы ----------------------------
+
+
+@app.get("/api/orders", dependencies=[Depends(require_auth)])
+def api_orders(start_from: str = ""):
+    """Страница продаж с FunPay: 100 заказов и указатель на следующую сотню."""
+    data = store.load()
+    result = funpay.orders(data["golden_key"], data["user_agent"], start_from.strip() or None)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)

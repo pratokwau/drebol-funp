@@ -338,3 +338,59 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 .calc-extra .t{font-size:11.5px;color:var(--muted)}
 .calc-extra .n{font-size:15px;font-weight:600;font-family:'JetBrains Mono',ui-monospace,monospace}
 #hint{margin:18px 2px 0}
+
+/* ---------- заказы ---------- */
+.content.wide{max-width:1240px}
+.orders-sum{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
+.orders-tools{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.search{
+  flex:1;min-width:220px;height:42px;padding:0 15px;
+  background:var(--glass);border:1px solid var(--line);border-radius:11px;
+  color:var(--ink);font-family:inherit;font-size:13.5px;outline:none;
+  transition:border-color .25s,background .25s,box-shadow .25s;
+}
+.search::placeholder{color:var(--muted)}
+.search:focus{border-color:rgba(124,92,255,.7);background:rgba(255,255,255,.05);box-shadow:0 0 0 4px rgba(124,92,255,.1)}
+
+.orders{display:flex;flex-direction:column;gap:6px}
+.order{
+  display:grid;align-items:center;gap:14px;
+  grid-template-columns:78px minmax(0,1fr) 130px 120px 120px 92px;
+  padding:13px 15px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(255,255,255,.022);text-decoration:none;color:inherit;
+  font-size:13.5px;transition:background .2s,border-color .2s,transform .15s;
+  animation:rise .35s both;
+}
+.order:hover{background:rgba(255,255,255,.055);border-color:rgba(124,92,255,.4);transform:translateX(2px)}
+.order .oid{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--muted)}
+.order .otitle{display:flex;flex-direction:column;gap:3px;min-width:0}
+.order .otitle>span.ocat{font-size:11.5px;color:var(--muted)}
+.order .otitle{overflow:hidden;text-overflow:ellipsis}
+.order .obuyer{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.order .oprice{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:600;text-align:right}
+.order .odate{font-size:12px;color:var(--muted);text-align:right;display:flex;flex-direction:column;gap:2px}
+.order .odate .t{font-size:11px;opacity:.75}
+.order .ostatus{
+  justify-self:start;font-size:11.5px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--muted);white-space:nowrap;
+}
+.order .ostatus.st-closed{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:#4ade80}
+.order .ostatus.st-paid{border-color:rgba(124,92,255,.4);background:rgba(124,92,255,.12);color:#a996ff}
+.order .ostatus.st-refunded,
+.order .ostatus.st-partially_refunded{border-color:rgba(255,85,112,.35);background:rgba(255,85,112,.1);color:#ff8095}
+
+.orders-empty{padding:26px 4px;text-align:center}
+.orders-foot{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:20px}
+.orders-foot .btn{min-width:210px}
+.orders-foot .tip{margin:0;text-align:center}
+.err{color:#ff8095}
+
+@media (max-width:900px){
+  .order{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"title price" "meta date";row-gap:8px}
+  .order .oid{display:none}
+  .order .otitle{grid-area:title}
+  .order .oprice{grid-area:price}
+  .order .obuyer{grid-area:meta}
+  .order .odate{grid-area:date;flex-direction:row;gap:6px;justify-content:flex-end}
+  .order .ostatus{display:none}
+}
