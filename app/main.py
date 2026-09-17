@@ -37,6 +37,10 @@ def load_env() -> None:
 load_env()
 
 DOMAIN = os.getenv("DOMAIN", "localhost")
+SITE_PORT = os.getenv("SITE_PORT", "")
+SITE_URL = os.getenv("SITE_URL") or (
+    f"https://{DOMAIN}" if SITE_PORT in ("", "443") else f"https://{DOMAIN}:{SITE_PORT}"
+)
 ADMIN_LOGIN = os.getenv("ADMIN_LOGIN", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
@@ -94,7 +98,7 @@ def banner() -> None:
     line = "=" * 60
     print(f"\n{line}", flush=True)
     print("  drebol-funp запущен", flush=True)
-    print(f"  Адрес:  https://{DOMAIN}", flush=True)
+    print(f"  Адрес:  {SITE_URL}", flush=True)
     print(f"  Логин:  {ADMIN_LOGIN}", flush=True)
     print(f"  Пароль: {ADMIN_PASSWORD}", flush=True)
     print(f"{line}\n", flush=True)
@@ -169,7 +173,7 @@ async def api_logout(response: Response):
 async def api_me(request: Request):
     if not verify(request.cookies.get(COOKIE_NAME)):
         return JSONResponse({"ok": False}, status_code=401)
-    return {"ok": True, "login": ADMIN_LOGIN, "domain": DOMAIN}
+    return {"ok": True, "login": ADMIN_LOGIN, "domain": DOMAIN, "url": SITE_URL}
 
 
 @app.get("/api/health")
