@@ -1,7 +1,9 @@
 """Обновление панели с GitHub: версия, проверка новых коммитов, запуск апдейта."""
 from __future__ import annotations
 
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -98,9 +100,18 @@ def start() -> dict:
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPDATE_LOG.write_text("", encoding="utf-8")
+
+    # копируем скрипт за пределы репозитория: git reset --hard во время работы
+    # перезаписал бы файл, который bash в этот момент читает
+    try:
+        tmp = Path(tempfile.mkdtemp(prefix="drebol-update-")) / "update.sh"
+        shutil.copy2(UPDATE_SCRIPT, tmp)
+    except OSError as e:
+        return {"ok": False, "error": f"Не удалось подготовить обновление: {e}"}
+
     subprocess.Popen(
-        ["/bin/bash", str(UPDATE_SCRIPT)],
-        cwd=BASE_DIR,
+        ["/bin/bash", str(tmp), str(BASE_DIR)],
+        cwd="/",
         start_new_session=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

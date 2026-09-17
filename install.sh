@@ -235,6 +235,18 @@ if (( PYMAJ < 3 || ( PYMAJ == 3 && PYMIN < 10 ) )); then
 fi
 ok "Python $PYV подходит."
 
+# Локальный игнор на случай, если .gitignore не залит в репозиторий
+# (веб-интерфейс GitHub не загружает файлы, начинающиеся с точки).
+# .git/info/exclude работает как .gitignore, но живёт только на сервере.
+ensure_git_exclude() {
+  local dir="$1" ex="$1/.git/info/exclude" pat
+  [[ -d "$dir/.git" ]] || return 0
+  mkdir -p "$dir/.git/info"
+  for pat in "venv/" "data/" ".env" "__pycache__/" "*.pyc"; do
+    grep -qxF "$pat" "$ex" 2>/dev/null || echo "$pat" >> "$ex"
+  done
+}
+
 # ---------- код ----------
 if [[ -d "$OLD_DIR" && ! -d "$APP_DIR" ]]; then
   log "Нашёл старую установку в $OLD_DIR — переношу в $APP_DIR..."
@@ -253,6 +265,7 @@ else
   git clone -q "$REPO_URL" "$APP_DIR"
 fi
 chmod +x "$APP_DIR/scripts/"*.sh 2>/dev/null || true
+ensure_git_exclude "$APP_DIR"
 ok "Код на месте."
 
 log "Ставлю python-зависимости..."
