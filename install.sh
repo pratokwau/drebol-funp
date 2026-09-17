@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 REPO_URL="https://github.com/pratokwau/drebol-funp.git"
 APP_DIR="/root/drebol-funp"
+DISABLED_DIR="/root/drebol-funp-disabled-nginx"
 OLD_DIR="/opt/drebol-funp"
 SERVICE="drebol-funp"
 WEBROOT="/var/www/certbot"
@@ -72,12 +73,158 @@ log "Сайт будет здесь: ${C_G}$SITE_URL${C_R}"
 log "Внутренний порт приложения (127.0.0.1): $APP_PORT"
 echo
 
+# ---------- кто занимает порты ----------
+busy_on() { ss -ltnp 2>/dev/null | grep -E "[:.]$1[[:space:]]" || true; }
+B80="$(busy_on 80)"
+if [[ -n "$B80" ]] && ! grep -q "nginx" <<<"$B80"; then
+  warn "Порт 80 уже кем-то занят — nginx может не встать:"
+  echo "$B80"
+  warn "Если это apache2, останови его:  systemctl disable --now apache2"
+fi
+BSITE="$(busy_on "$SITE_PORT")"
+if [[ -n "$BSITE" ]] && ! grep -q "nginx" <<<"$BSITE"; then
+  warn "Порт $SITE_PORT уже занят:"
+  echo "$BSITE"
+  die "Выбери другой порт сайта или освободи этот."
+fi
+B443="$(busy_on 443)"
+if [[ -n "$B443" ]] && ! grep -q "nginx" <<<"$B443"; then
+  warn "Порт 443 занят не-nginx процессом:"
+  echo "$B443"
+  warn "Если в /etc/nginx есть конфиг с 'listen 443', nginx не стартанёт и установка пакета сломается."
+fi
+
+# диагностика, когда nginx отказывается стартовать
+nginx_report() {
+  echo "----------------------------------------------------------"
+  warn "nginx не поднялся. Кто занимает порты:"
+  ss -ltnp 2>/dev/null | grep -E "[:.](80|443|$SITE_PORT)[[:space:]]" || echo "  (ничего не слушает)"
+  warn "Проверка конфигов:"
+  nginx -t 2>&1 | sed 's/^/  /' || true
+  warn "Какие порты просят конфиги:"
+  grep -rn "listen" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | sed 's/^/  /' || true
+  echo "----------------------------------------------------------"
+  warn "Чаще всего помогает одно из:"
+  warn "  1) отключить чужой сайт:  rm /etc/nginx/sites-enabled/<имя> && systemctl restart nginx"
+  warn "  2) остановить того, кто держит порт (apache2, другая панель, docker)"
+  warn "  3) перезапустить начисто:  systemctl stop nginx; pkill -x nginx; systemctl start nginx"
+}
+
+# чужие конфиги nginx, которые просят порт, занятый не-nginx процессом
+# (типичный случай: 3x-ui/xray сидит на 443, а старый конфиг nginx тоже хочет 443)
+nginx_conflicts() {
+  local f base port who out=""
+  for f in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    [[ "$base" == "$SERVICE" ]] && continue
+    for port in $(grep -hoE "^[[:space:]]*listen[[:space:]]+[^;]*" "$f" 2>/dev/null | grep -oE "[0-9]{1,5}" | sort -un); do
+      (( port == SITE_PORT )) && continue
+      who="$(busy_on "$port")"
+      [[ -n "$who" ]] && ! grep -q "nginx" <<<"$who" && out+="$f|$port"$'\n'
+    done
+  done
+  printf '%s' "$out"
+}
+
+nginx_fix_conflicts() {
+  local list; list="$(nginx_conflicts)"
+  [[ -z "$list" ]] && return 0
+
+  echo
+  warn "Нашёл конфиги nginx, которые просят уже занятые порты:"
+  local f port
+  while IFS='|' read -r f port; do
+    [[ -z "$f" ]] && continue
+    echo "  $f  →  порт $port занят:"
+    busy_on "$port" | sed 's/^/      /'
+  done <<< "$list"
+  echo
+  warn "Пока они включены, nginx не запустится вообще — и твой сайт тоже."
+  warn "Твоя панель их не трогает, она будет на порту $SITE_PORT."
+  read -rp "$(echo -e "${C_B}Отключить эти конфиги?${C_R} (копии сохраню) [Y/n]: ")" ans
+  if [[ "${ans,,}" == "n" ]]; then
+    die "Тогда освободи порты сам и запусти установщик заново."
+  fi
+
+  mkdir -p "$DISABLED_DIR"
+  while IFS='|' read -r f port; do
+    [[ -z "$f" ]] && continue
+    [[ -e "$f" ]] || continue
+    cp -a "$(readlink -f "$f")" "$DISABLED_DIR/" 2>/dev/null || true
+    if [[ -L "$f" ]]; then rm -f "$f"; else mv "$f" "$f.disabled-by-drebol"; fi
+    ok "Отключён: $f (копия в $DISABLED_DIR)"
+  done <<< "$list"
+}
+
+nginx_apply() {
+  if ! nginx -t >>"$APT_LOG" 2>&1; then
+    nginx -t 2>&1 | sed 's/^/  /' || true
+    die "Конфиг nginx не прошёл проверку."
+  fi
+  systemctl reload nginx 2>/dev/null && return 0
+  systemctl restart nginx 2>/dev/null && return 0
+  nginx_report
+  die "nginx не запускается — разберись с конфликтом портов и запусти установщик заново."
+}
+
 # ---------- пакеты ----------
-log "Ставлю пакеты..."
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq git curl ca-certificates python3 python3-venv python3-pip nginx openssl iproute2 >/dev/null
-[[ "$USE_SSL" == "yes" ]] && apt-get install -y -qq certbot python3-certbot-nginx >/dev/null
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+APT_LOG="/tmp/drebol-apt.log"
+: > "$APT_LOG"
+
+apt_try() {
+  apt-get install -y -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef "$@" >>"$APT_LOG" 2>&1
+}
+
+apt_repair() {
+  log "Чиню состояние dpkg..."
+  dpkg --configure -a >>"$APT_LOG" 2>&1 || true
+  apt-get -f install -y >>"$APT_LOG" 2>&1 || true
+  apt-get update -qq >>"$APT_LOG" 2>&1 || true
+}
+
+apt_install() {
+  log "Ставлю: $*"
+  apt_try "$@" && return 0
+
+  warn "apt/dpkg вернул ошибку. Последние строки лога:"
+  echo "----------------------------------------------------------"
+  tail -n 25 "$APT_LOG"
+  echo "----------------------------------------------------------"
+
+  apt_repair
+  if apt_try "$@"; then ok "Со второй попытки установилось."; return 0; fi
+
+  warn "Ставлю пакеты по одному, чтобы найти виновника..."
+  local pkg failed=()
+  for pkg in "$@"; do
+    dpkg -s "$pkg" &>/dev/null && continue
+    apt_try "$pkg" || failed+=("$pkg")
+  done
+  if (( ${#failed[@]} )); then
+    echo
+    warn "Не установились: ${failed[*]}"
+    echo "----------------------------------------------------------"
+    tail -n 40 "$APT_LOG"
+    echo "----------------------------------------------------------"
+    die "Почини apt (полный лог: $APT_LOG) и запусти установщик заново."
+  fi
+  ok "Остальное встало по одному."
+}
+
+log "Обновляю списки пакетов..."
+apt-get update -qq >>"$APT_LOG" 2>&1 || { warn "apt-get update ругнулся:"; tail -n 15 "$APT_LOG"; apt_repair; }
+apt_install git curl ca-certificates python3 python3-venv python3-pip nginx openssl iproute2
+if ! systemctl is-active --quiet nginx; then
+  warn "nginx установлен, но не запущен — разбираюсь..."
+  nginx_fix_conflicts
+  systemctl start nginx 2>/dev/null || { nginx_report; die "Сначала освободи порт для nginx, потом запусти установщик заново."; }
+  ok "nginx поднялся."
+fi
+[[ "$USE_SSL" == "yes" ]] && apt_install certbot python3-certbot-nginx
 ok "Пакеты установлены."
 
 # ---------- код ----------
@@ -240,11 +387,11 @@ write_nginx_ssl() {
 }
 
 log "Настраиваю nginx..."
+nginx_fix_conflicts
 write_nginx_http
 ln -sf "/etc/nginx/sites-available/$SERVICE" "/etc/nginx/sites-enabled/$SERVICE"
 rm -f /etc/nginx/sites-enabled/default
-nginx -t >/dev/null 2>&1 || { nginx -t; die "Конфиг nginx не прошёл проверку."; }
-systemctl reload nginx
+nginx_apply
 ok "nginx настроен."
 
 # ---------- firewall ----------
@@ -264,8 +411,7 @@ if [[ "$USE_SSL" == "yes" ]]; then
   if [[ -n "$EMAIL" ]]; then CB+=(-m "$EMAIL"); else CB+=(--register-unsafely-without-email); fi
   if "${CB[@]}"; then
     write_nginx_ssl
-    nginx -t >/dev/null 2>&1 || { nginx -t; die "Конфиг nginx с SSL не прошёл проверку."; }
-    systemctl reload nginx
+    nginx_apply
     ok "SSL выпущен, автопродление включено (systemd timer certbot)."
   else
     warn "Certbot не смог выпустить сертификат — проверь, что A-запись домена смотрит на этот сервер и порт 80 открыт."
@@ -275,7 +421,7 @@ if [[ "$USE_SSL" == "yes" ]]; then
     USE_SSL="no"
     write_nginx_http
     sed -i "s|^SITE_URL=.*|SITE_URL=$SITE_URL|" "$APP_DIR/.env"
-    nginx -t >/dev/null 2>&1 && systemctl reload nginx
+    nginx_apply
     systemctl restart "$SERVICE"
     warn "Сайт поднят по HTTP: $SITE_URL"
   fi
