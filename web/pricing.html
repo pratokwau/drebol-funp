@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>drebol-funp — мин. цены</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-page">
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid"></div>
+    <div class="noise"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="logo small">
+      <span class="logo-mark">DF</span>
+      <h1>drebol<span>funp</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="/">Панель</a>
+      <a href="/orders">Заказы</a>
+      <a href="/pricing" class="active">Мин. цены</a>
+      <a href="/calc">Калькулятор</a>
+      <a href="/settings">Настройки</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="user" id="user">admin</span>
+      <button class="ghost" id="logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="content wide">
+    <section class="panel" style="--i:1">
+      <div class="panel-head">
+        <div>
+          <h2>Мин. цены</h2>
+          <p class="muted">Закупочные цены товаров. По ним панель сама считает чистую прибыль с каждой продажи во вкладке «Заказы».</p>
+        </div>
+        <div class="fee-box">
+          <label for="fee">Комиссия FunPay, %</label>
+          <input type="text" inputmode="decimal" id="fee" value="3">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="scanBtn"><span class="label">Добавить игры с FunPay</span><span class="spinner"></span></button>
+        <button class="btn ghost-btn" id="refreshBtn">Обновить список</button>
+      </div>
+    </section>
+
+    <section class="panel" style="--i:2">
+      <h2 class="calc-title">Мои игры</h2>
+      <div class="games" id="games"></div>
+      <p class="tip" id="gamesHint"></p>
+    </section>
+  </main>
+
+  <!-- окно выбора игр после сканирования -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>Разделы в твоём профиле</h3>
+          <p class="muted" id="scanInfo">—</p>
+        </div>
+        <button class="ghost" id="closeModal">Закрыть</button>
+      </div>
+      <input type="search" id="scanFilter" class="search" placeholder="Поиск по играм и разделам">
+      <div class="scan-list" id="scanList"></div>
+      <div class="modal-foot">
+        <span class="muted" id="pickInfo">выбрано 0</span>
+        <button class="btn primary" id="addGamesBtn"><span class="label">Добавить выбранные</span><span class="spinner"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/pricing.js"></script>
+</body>
+</html>

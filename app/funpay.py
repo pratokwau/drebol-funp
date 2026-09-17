@@ -25,6 +25,8 @@ STATUS_RU = {
 
 # кэш авторизованного аккаунта: пересоздаём при смене ключа или по таймауту
 _cache: dict = {"account": None, "signature": None, "time": 0.0}
+PROFILE_TTL = 5 * 60
+_profile_cache: dict = {"profile": None, "user_id": None, "time": 0.0}
 
 
 def _load_lib():
@@ -34,6 +36,25 @@ def _load_lib():
     from FunPayAPI.common import exceptions
 
     return requests, FunPayAPI, exceptions
+
+
+def _sub_key(subcategory) -> str:
+    """Уникальный ключ подкатегории: lot-256 / chip-4471."""
+    type_name = getattr(getattr(subcategory, "type", None), "name", "COMMON")
+    prefix = "chip" if type_name == "CURRENCY" else "lot"
+    return f"{prefix}-{subcategory.id}"
+
+
+def _profile(account, force: bool = False):
+    """Профиль продавца с лотами, кэш на 5 минут."""
+    if not force and _profile_cache["profile"] is not None \
+            and _profile_cache["user_id"] == account.id \
+            and time.time() - _profile_cache["time"] < PROFILE_TTL:
+        return _profile_cache["profile"]
+
+    profile = account.get_user(account.id)
+    _profile_cache.update({"profile": profile, "user_id": account.id, "time": time.time()})
+    return profile
 
 
 def _error(exceptions_mod, requests_mod, e) -> dict | None:
@@ -145,3 +166,82 @@ def orders(golden_key: str, user_agent: str = "", start_from: str | None = None)
         })
 
     return {"ok": True, "orders": items, "next": next_id, "count": len(items)}
+
+
+def scan_games(golden_key: str, user_agent: str = "") -> dict:
+    """Сканирует профиль и возвращает разделы FunPay, в которых есть лоты."""
+    key = (golden_key or "").strip()
+    if not key:
+        return {"ok": False, "error": "Сначала задай golden key в настройках"}
+
+    try:
+        requests, _, exceptions = _load_lib()
+    except ImportError as e:
+        return {"ok": False, "error": f"Не хватает библиотеки: {e}. Обнови панель с GitHub."}
+
+    try:
+        account = get_account(key, user_agent)
+        profile = _profile(account, force=True)
+        sorted_lots = profile.get_sorted_lots(2)
+    except Exception as e:  # noqa: BLE001
+        known = _error(exceptions, requests, e)
+        if known:
+            return known
+        logger.exception("Не удалось просканировать профиль FunPay")
+        return {"ok": False, "error": f"Неожиданная ошибка: {e.__class__.__name__}: {e}"}
+
+    games = []
+    for subcategory, lots in sorted_lots.items():
+        category = getattr(subcategory, "category", None)
+        games.append({
+            "key": _sub_key(subcategory),
+            "sub_id": subcategory.id,
+            "name": subcategory.name,
+            "game": getattr(category, "name", "") or "",
+            "fullname": getattr(subcategory, "fullname", subcategory.name),
+            "link": getattr(subcategory, "public_link", ""),
+            "lots": len(lots),
+        })
+
+    games.sort(key=lambda g: (g["game"], g["name"]))
+    return {"ok": True, "games": games, "username": profile.username, "total": len(games)}
+
+
+def subcategory_lots(golden_key: str, user_agent: str = "", game_key: str = "") -> dict:
+    """Лоты профиля внутри одного раздела — из них удобно заводить товары."""
+    key = (golden_key or "").strip()
+    if not key:
+        return {"ok": False, "error": "Сначала задай golden key в настройках"}
+
+    try:
+        requests, _, exceptions = _load_lib()
+    except ImportError as e:
+        return {"ok": False, "error": f"Не хватает библиотеки: {e}. Обнови панель с GitHub."}
+
+    try:
+        account = get_account(key, user_agent)
+        profile = _profile(account)
+        sorted_lots = profile.get_sorted_lots(2)
+    except Exception as e:  # noqa: BLE001
+        known = _error(exceptions, requests, e)
+        if known:
+            return known
+        logger.exception("Не удалось получить лоты раздела")
+        return {"ok": False, "error": f"Неожиданная ошибка: {e.__class__.__name__}: {e}"}
+
+    for subcategory, lots in sorted_lots.items():
+        if _sub_key(subcategory) != game_key:
+            continue
+        items = [{
+            "id": str(lot.id),
+            "title": lot.description or "",
+            "price": lot.price,
+            "currency": str(lot.currency),
+            "amount": lot.amount,
+            "auto": bool(lot.auto),
+            "link": lot.public_link,
+        } for lot in lots.values()]
+        items.sort(key=lambda i: i["title"])
+        return {"ok": True, "lots": items, "count": len(items)}
+
+    return {"ok": False, "error": "Раздел не найден в профиле — просканируй игры заново"}

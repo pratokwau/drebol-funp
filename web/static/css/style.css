@@ -10,6 +10,8 @@
   --danger:#ff5570;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+/* hidden должен побеждать display:flex/grid у .modal, .account и прочих */
+[hidden]{display:none!important}
 html,body{height:100%}
 body{
   background:var(--bg);
@@ -355,7 +357,7 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 .orders{display:flex;flex-direction:column;gap:6px}
 .order{
   display:grid;align-items:center;gap:14px;
-  grid-template-columns:78px minmax(0,1fr) 130px 120px 120px 92px;
+  grid-template-columns:74px minmax(0,1fr) 116px 108px 112px 104px 86px;
   padding:13px 15px;border:1px solid var(--line);border-radius:12px;
   background:rgba(255,255,255,.022);text-decoration:none;color:inherit;
   font-size:13.5px;transition:background .2s,border-color .2s,transform .15s;
@@ -385,12 +387,111 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 .orders-foot .tip{margin:0;text-align:center}
 .err{color:#ff8095}
 
-@media (max-width:900px){
-  .order{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"title price" "meta date";row-gap:8px}
+@media (max-width:1100px){
+  .order{grid-template-columns:minmax(0,1fr) 110px 110px;grid-template-areas:"title price profit" "meta date date";row-gap:8px}
+  .order .oid,.order .ostatus{display:none}
+  .order .otitle{grid-area:title}
+  .order .oprice{grid-area:price}
+  .order .oprofit{grid-area:profit}
+  .order .obuyer{grid-area:meta}
+  .order .odate{grid-area:date;flex-direction:row;gap:6px;justify-content:flex-end}
+}
+@media (max-width:620px){
+  .order{grid-template-columns:minmax(0,1fr) 110px;grid-template-areas:"title price" "meta profit" "date date";row-gap:8px}
   .order .oid{display:none}
   .order .otitle{grid-area:title}
   .order .oprice{grid-area:price}
   .order .obuyer{grid-area:meta}
   .order .odate{grid-area:date;flex-direction:row;gap:6px;justify-content:flex-end}
   .order .ostatus{display:none}
+}
+
+/* ---------- мин. цены ---------- */
+.fee-box{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.fee-box label{font-size:11.5px;color:var(--muted)}
+.fee-box input{
+  width:110px;height:40px;padding:0 13px;border-radius:11px;
+  background:var(--glass);border:1px solid var(--line);color:var(--ink);
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:14px;outline:none;
+  transition:border-color .25s,box-shadow .25s;
+}
+.fee-box input:focus{border-color:rgba(124,92,255,.7);box-shadow:0 0 0 4px rgba(124,92,255,.1)}
+
+.games{display:flex;flex-direction:column;gap:10px}
+.game{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.022);overflow:hidden;animation:rise .35s both}
+.game.open{border-color:rgba(124,92,255,.4);background:rgba(124,92,255,.05)}
+.game-head{display:flex;align-items:center;gap:14px;padding:15px 17px;cursor:pointer;transition:background .2s}
+.game-head:hover{background:rgba(255,255,255,.035)}
+.game-name{display:flex;flex-direction:column;gap:3px;margin-right:auto;min-width:0}
+.gtitle{font-size:15px;font-weight:600}
+.gsub{font-size:12px;color:var(--muted)}
+.chev{color:var(--muted);font-size:12px;width:12px;text-align:center}
+.game-body{padding:4px 17px 18px;border-top:1px solid var(--line)}
+
+.mini{
+  width:26px;height:26px;flex-shrink:0;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--muted);
+  font-size:15px;line-height:1;transition:background .2s,color .2s,border-color .2s;
+}
+.mini:hover{background:rgba(255,255,255,.1);color:var(--ink)}
+.mini.danger:hover{background:rgba(255,85,112,.18);border-color:rgba(255,85,112,.4);color:#ff8095}
+
+.pitem{
+  display:grid;grid-template-columns:minmax(0,1fr) 190px 110px 34px;gap:12px;align-items:center;
+  padding:10px 12px;border-radius:10px;font-size:13.5px;
+}
+.pitem:nth-child(odd){background:rgba(255,255,255,.02)}
+.pitem.head{font-size:11.5px;color:var(--muted);background:none;padding-bottom:4px}
+.pitem .ptitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pitem .pkeys{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pitem .pcost{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:600;text-align:right}
+.pad{padding:14px 12px}
+
+.add-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.add-row .search{flex:1;min-width:170px}
+.search.narrow{flex:0 0 140px;min-width:110px}
+.lots-block{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.lots{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.lot{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.02);font-size:13.5px;flex-wrap:wrap}
+.lot .ltitle{flex:1;min-width:150px;overflow:hidden;text-overflow:ellipsis}
+.lot .lprice{font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--muted)}
+.lot .btn{height:36px;padding:0 14px}
+
+/* окно сканирования */
+.modal{
+  position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;
+  background:rgba(4,4,7,.72);backdrop-filter:blur(6px);animation:fade .25s both;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal-card{
+  width:min(680px,100%);max-height:86vh;display:flex;flex-direction:column;gap:14px;
+  padding:24px;border-radius:20px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(22,22,28,.98),rgba(12,12,16,.98));
+  box-shadow:0 30px 90px rgba(0,0,0,.7);animation:card-in .4s cubic-bezier(.2,.8,.2,1) both;
+}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.modal-head h3{font-size:17px;margin-bottom:4px}
+.modal-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:4px}
+.scan-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:120px}
+.scan-item{
+  display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;
+  border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.022);
+  font-size:13.5px;transition:background .2s,border-color .2s;
+}
+.scan-item:hover{background:rgba(255,255,255,.055)}
+.scan-item.added{opacity:.55;cursor:default}
+.scan-item input{width:17px;height:17px;accent-color:#7c5cff;cursor:pointer}
+.sname{display:flex;flex-direction:column;gap:2px;margin-right:auto}
+.ssub{font-size:11.5px;color:var(--muted)}
+.slots{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',ui-monospace,monospace}
+
+/* прибыль в списке заказов */
+.order .oprofit{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:600;text-align:right;font-size:13px}
+.order .oprofit.plus{color:#4ade80}
+.order .oprofit.minus{color:#ff8095}
+.order .oprofit.none{color:var(--muted);font-weight:400}
+
+@media (max-width:760px){
+  .pitem{grid-template-columns:minmax(0,1fr) 90px 30px}
+  .pitem .pkeys{display:none}
 }

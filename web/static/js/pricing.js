@@ -1,0 +1,321 @@
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const toastEl = $('toast');
+  let state = { fee: 3, games: [], items: {} };
+  let found = [];          // результат сканирования
+  let picked = new Set();  // выбранные в окне сканирования
+  let openGame = null;     // раскрытая игра
+  let lotsCache = {};      // лоты с FunPay по ключу игры
+
+  const toast = (msg, kind = '') => {
+    toastEl.textContent = msg;
+    toastEl.className = `toast show ${kind}`;
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(() => (toastEl.className = 'toast'), 3200);
+  };
+
+  const esc = (v) =>
+    String(v ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+  const money = (v) => (Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '—');
+
+  const busy = (btn, on) => {
+    if (!btn) return;
+    btn.classList.toggle('loading', on);
+    btn.disabled = on;
+  };
+
+  const api = async (url, options = {}) => {
+    const res = await fetch(url, {
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+      ...options,
+    });
+    if (res.status === 401) { window.location.href = '/login'; throw new Error('auth'); }
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) throw new Error(data.error || 'Запрос не удался');
+    return data;
+  };
+
+  // ---------------------------- список игр ----------------------------
+
+  const itemRow = (item) => `
+    <div class="pitem" data-id="${esc(item.id)}">
+      <span class="ptitle">${esc(item.title)}</span>
+      <span class="pkeys">${item.keywords ? esc(item.keywords) : ''}</span>
+      <span class="pcost">${money(item.cost)}</span>
+      <button class="mini danger" data-del="${esc(item.id)}" title="Удалить">×</button>
+    </div>`;
+
+  const gameCard = (game) => {
+    const items = state.items[game.key] || [];
+    const open = openGame === game.key;
+    return `
+      <div class="game ${open ? 'open' : ''}" data-key="${esc(game.key)}">
+        <div class="game-head" data-toggle="${esc(game.key)}">
+          <div class="game-name">
+            <span class="gtitle">${esc(game.game || game.name)}</span>
+            <span class="gsub">${esc(game.name)}${game.lots ? ` · ${game.lots} лотов` : ''}</span>
+          </div>
+          <span class="pill ${items.length ? 'on' : ''}">${items.length} товаров</span>
+          <button class="mini danger" data-delgame="${esc(game.key)}" title="Убрать игру">×</button>
+          <span class="chev">${open ? '▾' : '▸'}</span>
+        </div>
+
+        <div class="game-body" ${open ? '' : 'hidden'}>
+          <div class="pitem head">
+            <span class="ptitle">Товар</span>
+            <span class="pkeys">Ключевые слова</span>
+            <span class="pcost">Закуп</span>
+            <span></span>
+          </div>
+          <div class="pitems">${items.map(itemRow).join('') || '<p class="muted pad">Товаров пока нет.</p>'}</div>
+
+          <div class="add-row">
+            <input type="text" class="search" data-f="title" placeholder="Название товара (как в заказе)">
+            <input type="text" class="search narrow" data-f="keywords" placeholder="Слова для поиска">
+            <input type="text" class="search narrow" data-f="cost" inputmode="decimal" placeholder="Закуп">
+            <button class="btn primary" data-add="${esc(game.key)}"><span class="label">Добавить</span><span class="spinner"></span></button>
+          </div>
+
+          <div class="lots-block">
+            <button class="btn ghost-btn" data-lots="${esc(game.key)}"><span class="label">Подтянуть лоты с FunPay</span><span class="spinner"></span></button>
+            <div class="lots" data-lotsbox="${esc(game.key)}"></div>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  const render = () => {
+    $('fee').value = state.fee;
+    $('games').innerHTML = state.games.map(gameCard).join('');
+    const total = Object.values(state.items).reduce((a, i) => a + i.length, 0);
+    $('gamesHint').textContent = state.games.length
+      ? `Игр: ${state.games.length}, товаров с ценой закупа: ${total}. Названия сопоставляются с заказами автоматически.`
+      : 'Пока пусто. Нажми «Добавить игры с FunPay» — панель просканирует профиль и покажет твои разделы.';
+  };
+
+  const reload = async () => {
+    const data = await api('/api/pricing');
+    state = { fee: data.fee, games: data.games, items: data.items };
+    render();
+  };
+
+  // ---------------------------- сканирование ----------------------------
+
+  const scanRow = (g) => `
+    <label class="scan-item ${g.added ? 'added' : ''}">
+      <input type="checkbox" value="${esc(g.key)}" ${g.added ? 'disabled checked' : ''}>
+      <span class="sname">${esc(g.game || g.name)}<span class="ssub">${esc(g.name)}</span></span>
+      <span class="slots">${g.lots} лотов</span>
+      ${g.added ? '<span class="pill on">уже добавлено</span>' : ''}
+    </label>`;
+
+  const renderScan = () => {
+    const q = $('scanFilter').value.trim().toLowerCase();
+    const list = q
+      ? found.filter((g) => `${g.game} ${g.name}`.toLowerCase().includes(q))
+      : found;
+    $('scanList').innerHTML = list.map(scanRow).join('') || '<p class="muted pad">Ничего не найдено.</p>';
+    $('scanList').querySelectorAll('input[type=checkbox]:not([disabled])').forEach((cb) => {
+      cb.checked = picked.has(cb.value);
+      cb.addEventListener('change', () => {
+        cb.checked ? picked.add(cb.value) : picked.delete(cb.value);
+        $('pickInfo').textContent = `выбрано ${picked.size}`;
+      });
+    });
+    $('pickInfo').textContent = `выбрано ${picked.size}`;
+  };
+
+  $('scanBtn').addEventListener('click', async () => {
+    const btn = $('scanBtn');
+    busy(btn, true);
+    try {
+      const data = await api('/api/pricing/scan', { method: 'POST' });
+      found = data.games;
+      picked = new Set();
+      $('scanInfo').textContent = `${data.username}: найдено разделов — ${data.total}`;
+      $('scanFilter').value = '';
+      renderScan();
+      $('modal').hidden = false;
+      if (!found.length) toast('В профиле не нашлось лотов', 'bad');
+    } catch (e) {
+      if (e.message !== 'auth') toast(e.message, 'bad');
+    }
+    busy(btn, false);
+  });
+
+  $('addGamesBtn').addEventListener('click', async () => {
+    if (!picked.size) { toast('Отметь хотя бы одну игру'); return; }
+    const btn = $('addGamesBtn');
+    busy(btn, true);
+    try {
+      await api('/api/pricing/games', {
+        method: 'POST',
+        body: JSON.stringify({ keys: [...picked], found }),
+      });
+      await reload();
+      $('modal').hidden = true;
+      toast(`Добавлено игр: ${picked.size}`, 'good');
+    } catch (e) {
+      if (e.message !== 'auth') toast(e.message, 'bad');
+    }
+    busy(btn, false);
+  });
+
+  $('closeModal').addEventListener('click', () => ($('modal').hidden = true));
+  $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').hidden = true; });
+  $('scanFilter').addEventListener('input', renderScan);
+  $('refreshBtn').addEventListener('click', () => reload().then(() => toast('Обновил')));
+
+  // ---------------------------- действия внутри игры ----------------------------
+
+  $('games').addEventListener('click', async (e) => {
+    const t = e.target;
+
+    const delGame = t.closest('[data-delgame]');
+    if (delGame) {
+      e.stopPropagation();
+      const key = delGame.dataset.delgame;
+      if (!confirm('Убрать игру вместе с её товарами?')) return;
+      await api(`/api/pricing/games/${encodeURIComponent(key)}`, { method: 'DELETE' });
+      if (openGame === key) openGame = null;
+      await reload();
+      toast('Игра убрана');
+      return;
+    }
+
+    const toggle = t.closest('[data-toggle]');
+    if (toggle) {
+      const key = toggle.dataset.toggle;
+      openGame = openGame === key ? null : key;
+      render();
+      return;
+    }
+
+    const del = t.closest('[data-del]');
+    if (del) {
+      await api(`/api/pricing/items/${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE' });
+      await reload();
+      toast('Товар удалён');
+      return;
+    }
+
+    const add = t.closest('[data-add]');
+    if (add) {
+      const key = add.dataset.add;
+      const box = add.closest('.add-row');
+      const get = (f) => box.querySelector(`[data-f="${f}"]`).value;
+      if (!get('title').trim()) { toast('Введи название товара', 'bad'); return; }
+      busy(add, true);
+      try {
+        await api('/api/pricing/items', {
+          method: 'POST',
+          body: JSON.stringify({
+            key, title: get('title'), keywords: get('keywords'), cost: get('cost') || '0',
+          }),
+        });
+        await reload();
+        toast('Товар добавлен', 'good');
+      } catch (err) {
+        if (err.message !== 'auth') toast(err.message, 'bad');
+      }
+      busy(add, false);
+      return;
+    }
+
+    const lots = t.closest('[data-lots]');
+    if (lots) {
+      const key = lots.dataset.lots;
+      busy(lots, true);
+      try {
+        const data = await api(`/api/pricing/lots?key=${encodeURIComponent(key)}`);
+        lotsCache[key] = data.lots;
+        renderLots(key);
+        toast(`Лотов: ${data.count}`, 'good');
+      } catch (err) {
+        if (err.message !== 'auth') toast(err.message, 'bad');
+      }
+      busy(lots, false);
+      return;
+    }
+
+    const save = t.closest('[data-savelot]');
+    if (save) {
+      const box = save.closest('.lot');
+      const key = save.dataset.savelot;
+      const cost = box.querySelector('input').value;
+      if (!cost.trim()) { toast('Укажи закуп', 'bad'); return; }
+      busy(save, true);
+      try {
+        await api('/api/pricing/items', {
+          method: 'POST',
+          body: JSON.stringify({
+            key, title: box.dataset.title, cost,
+            lot_id: box.dataset.lot, price: Number(box.dataset.price),
+          }),
+        });
+        await reload();
+        renderLots(key);
+        toast('Добавлено в мин. цены', 'good');
+      } catch (err) {
+        if (err.message !== 'auth') toast(err.message, 'bad');
+      }
+      busy(save, false);
+    }
+  });
+
+  // та же нормализация, что и на сервере: «Гемы 170шт» ⊂ «Brawl Stars | Гемы 170шт»
+  const norm = (v) => String(v ?? '').toLowerCase().replace(/[^\wа-яё]+/gi, ' ').trim();
+  const squash = (v) => norm(v).replace(/ /g, '');
+  const alreadyAdded = (lotTitle, items) =>
+    items.some((i) => {
+      const a = squash(i.title), b = squash(lotTitle);
+      return a && b && (b.includes(a) || a.includes(b));
+    });
+
+  const renderLots = (key) => {
+    const box = document.querySelector(`[data-lotsbox="${key}"]`);
+    if (!box) return;
+    const items = state.items[key] || [];
+    box.innerHTML = (lotsCache[key] || []).map((lot) => `
+      <div class="lot" data-title="${esc(lot.title)}" data-lot="${esc(lot.id)}" data-price="${esc(lot.price)}">
+        <span class="ltitle">${esc(lot.title) || '<span class="muted">без названия</span>'}</span>
+        <span class="lprice">${money(lot.price)} ${esc(lot.currency)}</span>
+        ${alreadyAdded(lot.title || '', items)
+          ? '<span class="pill on">уже в списке</span>'
+          : `<input type="text" class="search narrow" inputmode="decimal" placeholder="закуп">
+             <button class="btn ghost-btn" data-savelot="${esc(key)}"><span class="label">Добавить</span><span class="spinner"></span></button>`}
+      </div>`).join('') || '<p class="muted pad">Лотов в этом разделе нет.</p>';
+  };
+
+  // ---------------------------- комиссия ----------------------------
+
+  let feeTimer = null;
+  $('fee').addEventListener('input', () => {
+    clearTimeout(feeTimer);
+    feeTimer = setTimeout(async () => {
+      try {
+        const data = await api('/api/pricing/fee', {
+          method: 'POST',
+          body: JSON.stringify({ fee: $('fee').value }),
+        });
+        state.fee = data.fee;
+        toast(`Комиссия ${data.fee}%`, 'good');
+      } catch (e) {
+        if (e.message !== 'auth') toast(e.message, 'bad');
+      }
+    }, 700);
+  });
+
+  $('logout').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST' });
+    window.location.href = '/login';
+  });
+
+  fetch('/api/me')
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((d) => ($('user').textContent = d.login))
+    .catch(() => (window.location.href = '/login'));
+
+  reload().catch(() => {});
+})();

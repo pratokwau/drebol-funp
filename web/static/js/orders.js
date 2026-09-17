@@ -42,6 +42,10 @@
       <span class="obuyer">${esc(o.buyer)}</span>
       <span class="ostatus st-${esc(o.status_code)}">${esc(o.status)}</span>
       <span class="oprice">${money(o.price)} ${esc(o.currency)}</span>
+      <span class="oprofit ${o.profit === null ? 'none' : o.profit >= 0 ? 'plus' : 'minus'}"
+            title="${o.matched ? `закуп: ${money(o.cost)} · товар «${esc(o.matched)}»` : 'товар не найден в мин. ценах'}">
+        ${o.profit === null ? '—' : (o.profit > 0 ? '+' : '') + money(o.profit)}
+      </span>
       <span class="odate">${when(o.date)}</span>
     </a>`;
 
@@ -62,6 +66,13 @@
     const sumPill = $('sumPill');
     sumPill.hidden = !shown.length;
     sumPill.textContent = `на сумму ${money(sum)} ${cur}`;
+
+    const counted = shown.filter((o) => o.profit !== null && o.profit !== undefined);
+    const profit = counted.reduce((acc, o) => acc + o.profit, 0);
+    const profitPill = $('profitPill');
+    profitPill.hidden = !counted.length;
+    profitPill.className = `pill ${profit >= 0 ? 'on' : 'off'}`;
+    profitPill.textContent = `прибыль ${profit > 0 ? '+' : ''}${money(profit)} ${cur} (${counted.length} из ${shown.length})`;
 
     const empty = $('empty');
     if (!all.length) {
@@ -98,9 +109,13 @@
       render();
 
       $('moreBtn').hidden = !nextFrom;
-      $('footHint').textContent = nextFrom
+      const noMatch = all.filter((o) => o.profit === null).length;
+      const tail = noMatch
+        ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».`
+        : '';
+      $('footHint').textContent = (nextFrom
         ? `Показано ${all.length}. Есть ещё — жми кнопку.`
-        : `Это все заказы: ${all.length}.`;
+        : `Это все заказы: ${all.length}.`) + tail;
       if (data.orders.length) toast(`+${data.orders.length} заказов`, 'good');
     } catch {
       $('footHint').innerHTML = '<span class="err">Сервер недоступен</span>';
