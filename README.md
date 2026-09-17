@@ -54,8 +54,9 @@ journalctl -u drebol-funp -n 50 --no-pager
 
 - **Golden key** — из cookie `golden_key` на funpay.com. Сохраняется в
   `data/settings.json` (права 600), в интерфейсе показывается замаскированным.
-  Кнопка «Проверить ключ» заходит с ним на FunPay и показывает, чей это аккаунт
-  и какой баланс.
+  Кнопка «Сохранить и получить данные» заходит с ключом на FunPay через
+  библиотеку FunPayAPI и показывает карточку аккаунта: **ник, ID, баланс,
+  активные продажи и покупки**. Эти данные запоминаются и видны на главной.
 - **User-Agent** — должен совпадать с браузером, из которого взят ключ, иначе
   FunPay выкинет сессию. Кнопка «Стандартный UA» подставляет дефолтный.
 - **Обновление с GitHub** — показывает текущий коммит, проверяет новые
@@ -99,16 +100,22 @@ journalctl -u drebol-funp -f      # живой лог
 
 ## Стек
 
-Python 3 + FastAPI + uvicorn, nginx, certbot, systemd. Фронтенд — статика без сборки.
+Python 3.10+ + FastAPI + uvicorn, nginx, certbot, systemd. Фронтенд — статика без сборки.
+Работа с FunPay — через библиотеку [FunPayAPI](FunPayAPI) (лежит в репозитории,
+зависимости: requests, requests-toolbelt, beautifulsoup4, lxml).
+
+**Требуется Ubuntu 22.04 или новее** — FunPayAPI не работает на Python ниже 3.10,
+установщик проверяет это и предупредит.
 
 ## Структура
 
 ```
 install.sh          установщик для Ubuntu
 scripts/update.sh   обновление с GitHub + перезапуск сервиса
+FunPayAPI/          библиотека работы с FunPay
 app/main.py         бэкенд: авторизация, сессии, роуты
 app/store.py        настройки панели (data/settings.json)
-app/funpay.py       проверка golden_key через funpay.com
+app/funpay.py       данные аккаунта FunPay через FunPayAPI
 app/updater.py      версия, проверка и запуск обновления
 web/index.html      страница входа
 web/dashboard.html  панель

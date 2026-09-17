@@ -14,8 +14,15 @@
   get('/api/settings')
     .then((d) => {
       const tile = $('fpTile');
-      tile.textContent = d.has_key ? `ключ сохранён · ${d.key_mask}` : 'не подключён — задай golden key';
-      tile.style.color = d.has_key ? '#4ade80' : '';
+      const acc = d.account || {};
+      if (acc.id) {
+        tile.textContent = `${acc.username} · ID ${acc.id}`;
+        tile.style.color = '#4ade80';
+      } else if (d.has_key) {
+        tile.textContent = `ключ сохранён · ${d.key_mask}`;
+      } else {
+        tile.textContent = 'не подключён — задай golden key';
+      }
     })
     .catch(() => {});
 

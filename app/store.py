@@ -19,6 +19,8 @@ DEFAULTS: dict = {
     "golden_key": "",
     "user_agent": DEFAULT_UA,
     "updated_at": 0,
+    # последние успешно полученные данные аккаунта FunPay
+    "account": {},
 }
 
 

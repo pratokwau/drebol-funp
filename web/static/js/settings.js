@@ -38,6 +38,30 @@
   };
 
   // ---------- настройки FunPay ----------
+  const esc = (v) => String(v ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
+  const paintAccount = (acc) => {
+    const card = document.getElementById('accountCard');
+    if (!acc || !acc.id) { card.hidden = true; return; }
+    const nick = esc(acc.username || 'аккаунт');
+    const balance = acc.balance === null || acc.balance === undefined
+      ? '—' : `${esc(acc.balance)} ${esc(acc.currency || '')}`.trim();
+    card.innerHTML = `
+      <div class="ava">${nick.slice(0, 1).toUpperCase()}</div>
+      <div class="who">
+        <span class="nick">${nick}</span>
+        <span class="uid">ID ${esc(acc.id)}</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="n">${balance}</span><span class="t">баланс</span></div>
+        <div class="stat"><span class="n">${esc(acc.active_sales ?? 0)}</span><span class="t">активных продаж</span></div>
+        <div class="stat"><span class="n">${esc(acc.active_purchases ?? 0)}</span><span class="t">активных покупок</span></div>
+      </div>`;
+    card.hidden = false;
+    const pill = document.getElementById('fpStatus');
+    pill.textContent = nick;
+    pill.className = 'pill on';
+  };
   const paintKeyState = (d) => {
     const pill = $('fpStatus');
     if (d.has_key) {
@@ -57,6 +81,7 @@
     defaultUA = d.default_user_agent;
     uaInput.value = d.user_agent || '';
     paintKeyState(d);
+    paintAccount(d.account);
   };
 
   $('eyeKey').addEventListener('click', () => {
@@ -76,7 +101,10 @@
       if (res.ok && data.ok) {
         keyInput.value = '';
         paintKeyState(data);
-        toast('Настройки сохранены', 'good');
+        toast('Сохранено, забираю данные аккаунта...');
+        busy(btn, false);
+        await fetchAccount(btn);
+        return;
       } else {
         toast(data.error || 'Не удалось сохранить', 'bad');
       }
@@ -89,6 +117,7 @@
     const { data } = await post('/api/settings', { clear_key: '1', user_agent: uaInput.value });
     keyInput.value = '';
     paintKeyState(data);
+    paintAccount(null);
     $('fpResult').classList.remove('show');
     toast('Ключ удалён', 'good');
   });
@@ -98,8 +127,7 @@
     toast('Подставил стандартный user-agent');
   });
 
-  $('checkBtn').addEventListener('click', async () => {
-    const btn = $('checkBtn');
+  const fetchAccount = async (btn) => {
     busy(btn, true);
     try {
       const { data } = await post('/api/settings/check', {
@@ -107,20 +135,26 @@
         user_agent: uaInput.value,
       });
       if (data.ok) {
-        const bits = [`FunPay узнал тебя: <b>${data.username || 'аккаунт #' + data.user_id}</b>`];
-        if (data.balance) bits.push(`Баланс: <b>${data.balance}</b>`);
-        bits.push(`ID: <b>${data.user_id}</b>`);
-        showResult($('fpResult'), bits.join('<br>'), 'good');
-        $('fpStatus').textContent = data.username || 'подключён';
-        $('fpStatus').className = 'pill on';
-        toast('Ключ рабочий', 'good');
+        paintAccount({
+          id: data.user_id,
+          username: data.username,
+          balance: data.balance,
+          currency: data.currency,
+          active_sales: data.active_sales,
+          active_purchases: data.active_purchases,
+        });
+        showResult($('fpResult'),
+          `Получил данные аккаунта — <b>${esc(data.username)}</b>, ID <b>${esc(data.user_id)}</b>`, 'good');
+        toast(`Аккаунт: ${data.username}`, 'good');
       } else {
-        showResult($('fpResult'), data.error || 'Проверка не удалась', 'bad');
-        toast('Ключ не подошёл', 'bad');
+        showResult($('fpResult'), esc(data.error) || 'Не удалось получить данные', 'bad');
+        toast('Данные получить не вышло', 'bad');
       }
     } catch (e) { if (e.message !== 'auth') toast('Сервер недоступен', 'bad'); }
     busy(btn, false);
-  });
+  };
+
+  $('checkBtn').addEventListener('click', () => fetchAccount($('checkBtn')));
 
   // ---------- обновление ----------
   const paintVersion = (v) => {

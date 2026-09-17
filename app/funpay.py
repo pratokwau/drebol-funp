@@ -1,58 +1,63 @@
-"""Проверка golden_key: заходим на funpay.com с куки и смотрим, кто мы."""
+"""Работа с FunPay через библиотеку FunPayAPI."""
 from __future__ import annotations
 
-import html
-import json
-import re
-import urllib.error
-import urllib.request
+import logging
+import sys
+from pathlib import Path
 
-FUNPAY_URL = "https://funpay.com/"
-TIMEOUT = 20
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:  # чтобы был виден пакет FunPayAPI рядом с app/
+    sys.path.insert(0, str(BASE_DIR))
+
+logger = logging.getLogger("drebol.funpay")
+
+REQUEST_TIMEOUT = 20
 
 
-def check_key(golden_key: str, user_agent: str) -> dict:
-    """Возвращает {ok, user_id, username, balance, error}."""
-    if not golden_key:
+def account_info(golden_key: str, user_agent: str = "") -> dict:
+    """Заходит на FunPay с ключом и возвращает данные аккаунта."""
+    key = (golden_key or "").strip()
+    if not key:
         return {"ok": False, "error": "Golden key не задан"}
 
-    req = urllib.request.Request(
-        FUNPAY_URL,
-        headers={
-            "User-Agent": user_agent,
-            "Cookie": f"golden_key={golden_key}",
-            "Accept": "text/html,application/xhtml+xml",
-            "Accept-Language": "ru-RU,ru;q=0.9",
-        },
-    )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            body = resp.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "error": f"FunPay ответил {e.code}"}
-    except urllib.error.URLError as e:
-        return {"ok": False, "error": f"Нет связи с FunPay: {e.reason}"}
-    except TimeoutError:
-        return {"ok": False, "error": "FunPay не ответил за 20 секунд"}
-
-    m = re.search(r'data-app-data="([^"]+)"', body)
-    if not m:
-        return {"ok": False, "error": "Не похоже на страницу FunPay — проверь user-agent"}
+        import requests
+        import FunPayAPI
+        from FunPayAPI.common import exceptions
+    except ImportError as e:
+        return {"ok": False, "error": f"Не хватает библиотеки: {e}. Обнови панель с GitHub."}
 
     try:
-        app_data = json.loads(html.unescape(m.group(1)))
-    except json.JSONDecodeError:
-        return {"ok": False, "error": "FunPay вернул неожиданный ответ"}
+        account = FunPayAPI.Account(
+            key,
+            user_agent.strip() or None,
+            requests_timeout=REQUEST_TIMEOUT,
+        ).get()
+    except exceptions.UnauthorizedError:
+        return {"ok": False, "error": "Ключ недействителен — FunPay не пустил в аккаунт"}
+    except exceptions.RequestFailedError as e:
+        code = getattr(getattr(e, "response", None), "status_code", "?")
+        if code == 429:
+            return {"ok": False, "error": "FunPay временно блокирует запросы (429). Подожди минуту."}
+        return {"ok": False, "error": f"FunPay ответил {code}"}
+    except requests.exceptions.Timeout:
+        return {"ok": False, "error": f"FunPay не ответил за {REQUEST_TIMEOUT} секунд"}
+    except requests.exceptions.RequestException as e:
+        return {"ok": False, "error": f"Нет связи с FunPay: {e.__class__.__name__}"}
+    except Exception as e:  # noqa: BLE001 — показываем причину, но не роняем панель
+        logger.exception("Не удалось получить данные аккаунта FunPay")
+        return {"ok": False, "error": f"Неожиданная ошибка: {e.__class__.__name__}: {e}"}
 
-    user_id = app_data.get("userId") or 0
-    if not user_id:
-        return {"ok": False, "error": "Ключ недействителен — FunPay видит тебя как гостя"}
-
-    name = re.search(r'class="user-link-name"[^>]*>([^<]+)<', body)
-    balance = re.search(r'class="badge badge-balance"[^>]*>([^<]+)<', body)
     return {
         "ok": True,
-        "user_id": user_id,
-        "username": html.unescape(name.group(1)).strip() if name else "",
-        "balance": html.unescape(balance.group(1)).strip() if balance else "",
+        "user_id": account.id,
+        "username": account.username,
+        "balance": account.total_balance,
+        "currency": str(account.currency),
+        "active_sales": account.active_sales,
+        "active_purchases": account.active_purchases,
     }
+
+
+# старое имя, чтобы ничего не отвалилось
+check_key = account_info

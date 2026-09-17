@@ -227,6 +227,14 @@ fi
 [[ "$USE_SSL" == "yes" ]] && apt_install certbot python3-certbot-nginx
 ok "Пакеты установлены."
 
+PYV="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "0.0")"
+PYMAJ="${PYV%%.*}"; PYMIN="${PYV##*.}"
+if (( PYMAJ < 3 || ( PYMAJ == 3 && PYMIN < 10 ) )); then
+  warn "У тебя python $PYV, а библиотеке FunPayAPI нужен 3.10 или новее."
+  die "Обнови систему до Ubuntu 22.04+ либо поставь python3.10+ и запусти установщик заново."
+fi
+ok "Python $PYV подходит."
+
 # ---------- код ----------
 if [[ -d "$OLD_DIR" && ! -d "$APP_DIR" ]]; then
   log "Нашёл старую установку в $OLD_DIR — переношу в $APP_DIR..."

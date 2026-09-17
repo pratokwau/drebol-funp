@@ -208,6 +208,7 @@ async def api_settings_get():
         "user_agent": data["user_agent"],
         "default_user_agent": store.DEFAULT_UA,
         "updated_at": data["updated_at"],
+        "account": data.get("account") or {},
     }
 
 
@@ -221,6 +222,7 @@ async def api_settings_save(
 
     if clear_key == "1":
         data["golden_key"] = ""
+        data["account"] = {}
     elif golden_key.strip():
         key = golden_key.strip()
         if len(key) < 20:
@@ -242,10 +244,23 @@ async def api_settings_save(
 
 @app.post("/api/settings/check", dependencies=[Depends(require_auth)])
 def api_settings_check(golden_key: str = Form(""), user_agent: str = Form("")):
+    """Тянет данные аккаунта с FunPay и запоминает их."""
     data = store.load()
     key = golden_key.strip() or data["golden_key"]
     ua = user_agent.strip() or data["user_agent"]
-    result = funpay.check_key(key, ua)
+
+    result = funpay.account_info(key, ua)
+    if result["ok"]:
+        data["account"] = {
+            "id": result["user_id"],
+            "username": result["username"],
+            "balance": result["balance"],
+            "currency": result["currency"],
+            "active_sales": result["active_sales"],
+            "active_purchases": result["active_purchases"],
+            "checked_at": int(time.time()),
+        }
+        store.save(data)
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
