@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # drebol-funp :: installer for Ubuntu 20.04 / 22.04 / 24.04
-# Usage: sudo bash <(curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.sh)
+# Usage: curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.sh -o install.sh && bash install.sh
 set -Eeuo pipefail
 
 REPO_URL="https://github.com/pratokwau/drebol-funp.git"
@@ -16,7 +16,7 @@ warn() { echo -e "${C_Y}[!]${C_R} $*"; }
 die()  { echo -e "${C_E}[x]${C_R} $*" >&2; exit 1; }
 trap 'die "Ошибка на строке $LINENO. Установка прервана."' ERR
 
-[[ $EUID -eq 0 ]] || die "Запусти от root:  sudo bash <(curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.sh)"
+[[ $EUID -eq 0 ]] || die "Запусти от root:  sudo bash install.sh"
 [[ -r /etc/os-release ]] || die "Не Ubuntu/Debian система."
 . /etc/os-release
 [[ "${ID:-}" == "ubuntu" || "${ID_LIKE:-}" == *debian* ]] || die "Поддерживается только Ubuntu/Debian."

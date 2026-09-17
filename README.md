@@ -7,8 +7,14 @@
 ## Установка
 
 ```bash
-sudo bash <(curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.sh)
+curl -sSL https://raw.githubusercontent.com/pratokwau/drebol-funp/main/install.sh -o install.sh && bash install.sh
 ```
+
+Если ты не под root — `sudo bash install.sh`.
+
+> Не запускай через `sudo bash <(curl ...)` — `sudo` закрывает файловые
+> дескрипторы, и получишь `bash: /dev/fd/63: No such file or directory`.
+> И не через `curl ... | bash` — скрипт задаёт вопросы, а stdin будет занят.
 
 Скрипт спросит:
 
@@ -44,8 +50,8 @@ journalctl -u drebol-funp -n 50 --no-pager
 
 ## Что ставится
 
-- `/opt/drebol-funp` — код и виртуальное окружение
-- `/opt/drebol-funp/.env` — логин, пароль, адрес сайта, секретный ключ (права 600)
+- `/root/drebol-funp` — код и виртуальное окружение (права 700, сервис работает от root)
+- `/root/drebol-funp/.env` — логин, пароль, адрес сайта, секретный ключ (права 600)
 - `drebol-funp.service` — systemd-сервис: `systemctl enable` при установке, автостарт после ребута, рестарт через 3 сек при падении
 - nginx-конфиг `/etc/nginx/sites-available/drebol-funp` — слушает твой порт, проксирует на приложение
 - certbot с автопродлением сертификата
@@ -63,14 +69,15 @@ journalctl -u drebol-funp -f      # живой лог
 без тебя; процесс упал — systemd перезапустит его через 3 секунды, сколько бы раз
 это ни повторилось. Выключить автостарт: `systemctl disable drebol-funp`.
 
-Сменить пароль: отредактировать `ADMIN_PASSWORD` в `/opt/drebol-funp/.env`
+Сменить пароль: отредактировать `ADMIN_PASSWORD` в `/root/drebol-funp/.env`
 и перезапустить сервис.
 
 Сменить порт сайта: просто запустить установщик заново и ввести новый порт —
 пароль и сертификат сохранятся.
 
 Повторный запуск установщика обновляет код из git и сохраняет существующий `.env`
-(логин и пароль не меняются).
+(логин и пароль не меняются). Если панель стояла в `/opt/drebol-funp`, установщик
+сам перенесёт её в `/root/drebol-funp` вместе с паролем.
 
 ## Стек
 
