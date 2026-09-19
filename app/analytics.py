@@ -146,7 +146,10 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "",
             "fee": _money(revenue - net),
             "net": _money(net),
             "matched": len(matched),
-            "unmatched": len(rows) - len(matched),
+            # без закупа — только живые заказы: у возвратов прибыли нет по определению
+            "unmatched": sum(1 for o in rows if profit_of(o) is None and not o.get("refunded")),
+            "refunded": sum(1 for o in rows if o.get("refunded")),
+            "manual": sum(1 for o in matched if o.get("manual")),
             "matched_revenue": _money(m_revenue),
             "cost": _money(cost),
             "profit": _money(profit),
@@ -156,7 +159,8 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "",
             "avg_profit": _money(profit / len(matched)) if matched else 0,
             "zero_cost": sum(1 for o in matched if not cost_of(o)),
             "cashback_orders": sum(1 for o in matched if o.get("cashback_used")),
-            "undecided": sum(1 for o in matched if o.get("variants") and not o.get("choice")),
+            "undecided": sum(1 for o in matched if o.get("variants") and not o.get("choice")
+                             and not o.get("manual")),
             "cashback_saved": _money(saved),
             "loss_orders": sum(1 for o in matched if profit_of(o) < 0),
             "net_matched": _money(m_net),
@@ -228,8 +232,10 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "",
         out.sort(key=lambda r: (r["profit"], r["revenue"]), reverse=True)
         return out[:limit] if limit else out
 
-    products = group_by(lambda o: o.get("matched"))
-    unmatched = group_by(lambda o: None if o.get("matched") else (o.get("title") or "без названия"), 15)
+    # товар из «Мин. цен», а если закуп вписан руками без товара — название заказа
+    products = group_by(lambda o: o.get("matched") or (o.get("title") if o.get("manual") else None))
+    unmatched = group_by(lambda o: None if (o.get("matched") or o.get("manual") or o.get("refunded"))
+                         else (o.get("title") or "без названия"), 15)
     unmatched.sort(key=lambda r: r["revenue"], reverse=True)
     games = group_by(lambda o: o.get("category") or "Без раздела")
     buyers = group_by(lambda o: o.get("buyer"), 10)

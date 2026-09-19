@@ -730,3 +730,19 @@ table.data .neg{color:#ff8095}
   .pitem.editing .pactions{grid-column:1 / -1}
 }
 .edit-fields .search{flex:none}
+
+/* ---------- ручной закуп и возвраты в заказе ---------- */
+.cost-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:12px}
+.cost-line b{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:500}
+.cost-line .mini{width:24px;height:24px;font-size:12px}
+.cost-line.refund{color:#ff8095}
+.cost-input{
+  width:110px;height:28px;padding:0 9px;border-radius:8px;border:1px solid rgba(124,92,255,.55);
+  background:rgba(255,255,255,.05);color:var(--ink);font-family:'JetBrains Mono',ui-monospace,monospace;
+  font-size:12.5px;outline:none;
+}
+.badge-manual{font-size:10.5px;padding:2px 7px;border-radius:999px;background:rgba(124,92,255,.2);color:#b9a8ff;border:1px solid rgba(124,92,255,.4)}
+.link-btn{background:none;border:0;color:var(--muted);font-family:inherit;font-size:11.5px;text-decoration:underline;cursor:pointer;padding:0}
+.link-btn:hover{color:var(--ink)}
+.muted-hint{color:var(--muted)!important}
+.order .oprofit.refund{color:#ff8095;font-weight:500;font-size:12px}

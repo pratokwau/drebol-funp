@@ -44,8 +44,10 @@
   };
 
   // две цены закупа — выбираешь, какая пошла в этот заказ
+  let editingCost = null;   // номер заказа, где сейчас правят закуп
+
   const costPick = (o) => {
-    if (!o.variants) return '';
+    if (!o.variants || o.refunded || o.manual) return '';
     const btn = (key, label) => `
       <button class="cp ${o.choice === key ? 'on' : ''}" data-choice="${key}" data-id="${esc(o.id)}"
               title="${o.choice === key ? 'нажми ещё раз, чтобы сбросить' : 'посчитать заказ с этим закупом'}">
@@ -59,6 +61,38 @@
       </span>`;
   };
 
+  // закуп в этом заказе: видно, откуда он, и можно вписать свой
+  const costLine = (o) => {
+    if (o.refunded) return '<span class="cost-line refund">Возврат — прибыль не считается</span>';
+    const per = o.amount > 1 ? ` <span class="muted">(${money(o.amount ? o.cost / o.amount : o.cost)} за шт)</span>` : '';
+    if (editingCost === String(o.id)) {
+      return `
+        <span class="cost-line editing">
+          <span class="cp-label">Закуп за заказ:</span>
+          <input type="text" class="cost-input" inputmode="decimal" data-costinput="${esc(o.id)}"
+                 value="${o.manual ? esc(o.override) : ''}" placeholder="${o.base_cost !== null ? money(o.base_cost) : 'сумма'}">
+          <button class="mini ok" data-costsave="${esc(o.id)}" title="Сохранить (Enter)">✓</button>
+          <button class="mini" data-costcancel title="Отмена (Esc)">↺</button>
+          <span class="cp-hint muted-hint">пусто — вернуть ${o.base_cost !== null ? 'закуп из «Мин. цен»' : 'как было'}</span>
+        </span>`;
+    }
+    if (o.manual) {
+      return `
+        <span class="cost-line">
+          <span class="cp-label">Закуп:</span> <b>${money(o.cost)}</b>${per}
+          <span class="badge-manual" title="вписан вручную в этом заказе">вручную</span>
+          <button class="mini" data-costedit="${esc(o.id)}" title="Изменить закуп">✎</button>
+          <button class="link-btn" data-costreset="${esc(o.id)}">сбросить</button>
+        </span>`;
+    }
+    const label = o.cost !== null && o.cost !== undefined ? `<b>${money(o.cost)}</b>${per}` : '<span class="muted">не задан</span>';
+    return `
+      <span class="cost-line">
+        <span class="cp-label">Закуп:</span> ${label}
+        <button class="mini" data-costedit="${esc(o.id)}" title="Вписать закуп для этого заказа">✎</button>
+      </span>`;
+  };
+
   const row = (o) => {
     const p = pick(o);
     return `
@@ -69,34 +103,39 @@
         <span class="ocat">${esc(o.category || '')}${o.amount && o.amount > 1 ? ` · ${o.amount} шт` : ''}${
           o.matched ? ` · закуп по «${esc(o.matched)}»` : ''}</span>
         ${costPick(o)}
+        ${costLine(o)}
       </span>
       <span class="obuyer">${esc(o.buyer)}</span>
       <span class="ostatus st-${esc(o.status_code)}">${esc(o.status)}</span>
       <span class="oprice">${money(o.price)} ${esc(o.currency)}</span>
-      <span class="oprofit ${p.profit === null ? 'none' : !p.cost ? 'warn' : p.profit >= 0 ? 'plus' : 'minus'}"
-            title="${o.matched
+      ${o.refunded ? '<span class="oprofit none refund" title="заказ возвращён — прибыль не учитывается">возврат</span>' : `<span class="oprofit ${p.profit === null ? 'none' : !p.cost ? 'warn' : p.profit >= 0 ? 'plus' : 'minus'}"
+            title="${o.manual ? `закуп вписан вручную: ${money(p.cost)}` : o.matched
               ? (!p.cost
                   ? `у товара «${esc(o.matched)}» не задан закуп — прибыль показана как вся сумма`
                   : `закуп: ${money(p.cost)}${p.cb ? ' (с кэшбеком)' : ''} · товар «${esc(o.matched)}»`)
               : 'товар не найден в мин. ценах'}">
         ${p.profit === null ? '—' : (p.profit > 0 ? '+' : '') + money(p.profit)}${
           p.cb ? '<span class="cbdot" title="учтён кэшбек">•</span>' : ''}${
-          o.matched && !p.cost ? '<span class="warndot" title="закуп не задан">⚠</span>' : ''}
-      </span>
+          o.matched && !p.cost && !o.manual ? '<span class="warndot" title="закуп не задан">⚠</span>' : ''}
+      </span>`}
       <span class="odate">${when(o.date)}</span>
     </div>`;
   };
 
   const paintFoot = () => {
     if (!all.length) return;
-    const noMatch = all.filter((o) => o.profit === null).length;
+    const noMatch = all.filter((o) => o.profit === null && !o.refunded).length;
     const withCb = all.filter((o) => o.cashback_used).length;
-    const undecided = all.filter((o) => o.variants && !o.choice).length;
-    const zeroCost = all.filter((o) => o.matched && !pick(o).cost).length;
+    const undecided = all.filter((o) => o.variants && !o.choice && !o.manual && !o.refunded).length;
+    const zeroCost = all.filter((o) => o.matched && !o.manual && !o.refunded && !pick(o).cost).length;
+    const refunds = all.filter((o) => o.refunded).length;
+    const manual = all.filter((o) => o.manual && !o.refunded).length;
     const tail = (noMatch ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».` : '')
       + (zeroCost ? ` С нулевым закупом: ${zeroCost} — проставь цены в «Мин. ценах».` : '')
       + (undecided ? ` Не выбран вариант закупа: ${undecided} — пока считаю без кэшбека.` : '')
-      + (withCb ? ` С кэшбеком: ${withCb}.` : '');
+      + (withCb ? ` С кэшбеком: ${withCb}.` : '')
+      + (manual ? ` Закуп вписан вручную: ${manual}.` : '')
+      + (refunds ? ` Возвратов: ${refunds} — в прибыль не входят.` : '');
     $('footHint').textContent = (nextFrom
       ? `Показано ${all.length}. Есть ещё — жми кнопку.`
       : `Это все заказы: ${all.length}.`) + tail;
@@ -186,7 +225,56 @@
 
   $('filter').addEventListener('input', render);
 
+  const saveCost = async (id, value) => {
+    const o = all.find((x) => String(x.id) === String(id));
+    if (!o) return;
+    try {
+      const res = await fetch('/api/orders/cost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: o.id, cost: value,
+          order: { id: o.id, title: o.title, price: o.price, amount: o.amount, status_code: o.status_code },
+        }),
+      });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.error || 'не сохранилось');
+      if (data.order) Object.assign(o, data.order);
+      editingCost = null;
+      render();
+      toast(value === '' ? `#${o.id}: закуп снова из «Мин. цен»` : `#${o.id}: закуп ${money(o.cost)} вручную`, 'good');
+    } catch (err) {
+      toast(err.message, 'bad');
+    }
+  };
+
+  $('list').addEventListener('keydown', (e) => {
+    const inp = e.target.closest('[data-costinput]');
+    if (!inp) return;
+    if (e.key === 'Enter') { e.preventDefault(); saveCost(inp.dataset.costinput, inp.value.trim()); }
+    if (e.key === 'Escape') { editingCost = null; render(); }
+  });
+
   $('list').addEventListener('click', async (e) => {
+    const edit = e.target.closest('[data-costedit]');
+    if (edit) {
+      editingCost = edit.dataset.costedit;
+      render();
+      const inp = document.querySelector(`[data-costinput="${CSS.escape(editingCost)}"]`);
+      if (inp) { inp.focus(); inp.select(); }
+      return;
+    }
+    if (e.target.closest('[data-costcancel]')) { editingCost = null; render(); return; }
+    const save = e.target.closest('[data-costsave]');
+    if (save) {
+      const inp = document.querySelector(`[data-costinput="${CSS.escape(save.dataset.costsave)}"]`);
+      saveCost(save.dataset.costsave, inp ? inp.value.trim() : '');
+      return;
+    }
+    const reset = e.target.closest('[data-costreset]');
+    if (reset) { saveCost(reset.dataset.costreset, ''); return; }
+
     const btn = e.target.closest('[data-choice]');
     if (!btn) return;
     const o = all.find((x) => String(x.id) === btn.dataset.id);

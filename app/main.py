@@ -357,6 +357,29 @@ async def api_orders_choice(request: Request):
     return {"ok": True, "id": order_id, "choice": choice}
 
 
+@app.post("/api/orders/cost", dependencies=[Depends(require_auth)])
+async def api_orders_cost(request: Request):
+    """Ручной закуп за весь заказ. Пустое значение — вернуть автоматический.
+    В ответ — заказ, пересчитанный теми же правилами, что и список."""
+    body = await request.json()
+    order = body.get("order") or {}
+    order_id = str(body.get("id") or order.get("id") or "").strip().lstrip("#")
+    if not order_id:
+        return JSONResponse({"ok": False, "error": "Не указан заказ"}, status_code=400)
+
+    raw = str(body.get("cost") if body.get("cost") is not None else "").strip()
+    try:
+        cost = _money_field(raw, "Цена закупа") if raw else None
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+    pricing.set_override(order_id, cost)
+    fresh = {k: order.get(k) for k in ("id", "title", "price", "amount", "status_code")}
+    fresh["id"] = order_id
+    recalculated = pricing.apply_to_orders([fresh])[0] if fresh.get("title") is not None else None
+    return {"ok": True, "id": order_id, "cost": cost, "order": recalculated}
+
+
 # ---------------------------- мин. цены ----------------------------
 
 

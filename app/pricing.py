@@ -13,6 +13,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 FILE = DATA_DIR / "pricing.json"
 CHOICES_FILE = DATA_DIR / "cost_choices.json"   # номер заказа -> "cashback" | "plain"
+OVERRIDES_FILE = DATA_DIR / "cost_overrides.json"  # номер заказа -> закуп за весь заказ, вписанный вручную
+REFUND_STATUSES = {"refunded", "partially_refunded"}
 
 DEFAULTS: dict = {
     "fee": 3.0,            # комиссия FunPay, %
@@ -213,6 +215,32 @@ def apply_cashback(key: str, percent: float, overwrite: bool = False) -> dict:
     return {**stats, "items": data["items"][key]}
 
 
+# ---------------------------- ручной закуп в заказе ----------------------------
+
+
+def load_overrides() -> dict:
+    if OVERRIDES_FILE.exists():
+        try:
+            return json.loads(OVERRIDES_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def set_override(order_id: str, cost: float | None) -> dict:
+    overrides = load_overrides()
+    if cost is None:
+        overrides.pop(str(order_id), None)
+    else:
+        overrides[str(order_id)] = round(float(cost), 2)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = OVERRIDES_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(overrides, ensure_ascii=False), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(OVERRIDES_FILE)
+    return overrides
+
+
 # ---------------------------- выбор закупа по заказу ----------------------------
 
 
@@ -300,38 +328,59 @@ def match(order_title: str, items: list[dict]) -> dict | None:
 def apply_to_orders(orders: list[dict]) -> list[dict]:
     """Дополняет заказы закупом и чистой прибылью.
 
-    Если у товара две цены закупа (с кэшбеком и без), какая из них пошла
-    в заказ, выбирает пользователь. Пока не выбрал — считаем без кэшбека,
-    чтобы прибыль не оказалась завышенной.
+    Порядок, от главного к второстепенному:
+    1. Возврат — прибыли нет, заказ не участвует в суммах.
+    2. Закуп, вписанный вручную в этом заказе.
+    3. Закуп из «Мин. цен»; если у товара две цены — по выбору в заказе,
+       а пока не выбрано — без кэшбека, чтобы прибыль не оказалась завышенной.
     """
     data = load()
     items = _all_items(data)
     choices = load_choices()
+    overrides = load_overrides()
     fee = float(data.get("fee") or 0) / 100
     cashback_min = float(data.get("cashback_min") or 0)
 
     for order in orders:
+        oid = str(order.get("id"))
         item = match(order.get("title", ""), items) if items else None
         price = float(order.get("price") or 0)
         net = price * (1 - fee)
+        amount = order.get("amount") or 1
         order["net"] = round(net, 2)
+        order["matched"] = item["title"] if item else None
+        order["refunded"] = order.get("status_code") in REFUND_STATUSES
+        order["override"] = overrides.get(oid)
+        order["manual"] = order["override"] is not None
+        order["variants"] = None
+        order["choice"] = None
+        order["cashback_used"] = False
+        order["base_cost"] = None
 
-        if not item:
-            order.update({"cost": None, "profit": None, "matched": None,
-                          "variants": None, "choice": None, "cashback_used": False})
+        # закуп, который дала бы автоматика — нужен, чтобы вернуться к нему после сброса ручного
+        if item:
+            plain, cashback = variants(item, cashback_min)
+            if cashback is not None:
+                order["variants"] = {"plain": round(plain * amount, 2), "cashback": round(cashback * amount, 2)}
+                order["choice"] = choices.get(oid)
+            use_cb = order["choice"] == "cashback"
+            order["base_cost"] = round((cashback if use_cb else plain) * amount, 2)
+
+        if order["refunded"]:
+            order["cost"] = None
+            order["profit"] = None
             continue
 
-        amount = order.get("amount") or 1
-        plain, cashback = variants(item, cashback_min)
-        choice = choices.get(str(order.get("id"))) if cashback is not None else None
-        use_cb = choice == "cashback"
-        cost = (cashback if use_cb else plain) * amount
+        if order["manual"]:
+            cost = float(order["override"])
+        elif item:
+            cost = order["base_cost"]
+            order["cashback_used"] = order["choice"] == "cashback" and order["variants"] is not None
+        else:
+            order["cost"] = None
+            order["profit"] = None
+            continue
 
-        order["matched"] = item["title"]
-        order["variants"] = ({"plain": round(plain * amount, 2), "cashback": round(cashback * amount, 2)}
-                             if cashback is not None else None)
-        order["choice"] = choice
-        order["cashback_used"] = use_cb
         order["cost"] = round(cost, 2)
         order["profit"] = round(net - cost, 2)
 
