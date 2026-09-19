@@ -506,7 +506,9 @@
 
   // та же логика, что на сервере: сравниваем токены, числа — целиком,
   // иначе «50 голосов» цепляется к «500 голосов»
-  const tokens = (v) => String(v ?? '').toLowerCase().match(/\d+|[^\W\d_]+/gu) || [];
+  // \w в JS — только латиница, поэтому буквы берём через Unicode-классы,
+  // иначе кириллица выпадает и «100 AMZ» находится внутри «1 AMZ … От 100 AMZ»
+  const tokens = (v) => String(v ?? '').toLowerCase().match(/\p{Nd}+|[\p{L}\p{Nl}\p{No}]+/gu) || [];
   const contains = (hay, needle) => {
     if (!needle.length || needle.length > hay.length) return false;
     return hay.some((_, i) => needle.every((t, j) => hay[i + j] === t));
