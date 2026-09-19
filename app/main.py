@@ -419,6 +419,7 @@ def api_pricing_scan():
     if not result["ok"]:
         return JSONResponse(result, status_code=400)
 
+    pricing.refresh_games(result["games"])
     added = {g["key"] for g in pricing.load()["games"]}
     for game in result["games"]:
         game["added"] = game["key"] in added
@@ -457,6 +458,8 @@ async def api_pricing_remove_games(request: Request):
 def api_pricing_lots(key: str = ""):
     settings = store.load()
     result = funpay.subcategory_lots(settings["golden_key"], settings["user_agent"], key)
+    if result["ok"]:
+        pricing.update_game_lots(key, result["count"], funpay.unique_titles(l["title"] for l in result["lots"]))
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 

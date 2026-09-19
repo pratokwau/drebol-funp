@@ -68,6 +68,31 @@ def add_games(found: list[dict], keys: list[str]) -> dict:
     return save(data)
 
 
+def refresh_games(found: list[dict]) -> None:
+    """После сканирования обновляем у добавленных игр число лотов и их названия."""
+    data = load()
+    by_key = {g["key"]: g for g in found}
+    changed = False
+    for game in data["games"]:
+        fresh = by_key.get(game["key"])
+        if fresh:
+            game["lots"] = fresh.get("lots", game.get("lots"))
+            game["lot_titles"] = fresh.get("lot_titles", game.get("lot_titles"))
+            changed = True
+    if changed:
+        save(data)
+
+
+def update_game_lots(key: str, count: int, titles: list[str]) -> None:
+    data = load()
+    for game in data["games"]:
+        if game["key"] == key:
+            game["lots"] = count
+            game["lot_titles"] = titles
+            save(data)
+            return
+
+
 def remove_game(key: str) -> dict:
     return remove_games([key])
 

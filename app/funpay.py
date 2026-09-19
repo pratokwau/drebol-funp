@@ -168,6 +168,18 @@ def orders(golden_key: str, user_agent: str = "", start_from: str | None = None)
     return {"ok": True, "orders": items, "next": next_id, "count": len(items)}
 
 
+def unique_titles(titles) -> list[str]:
+    """Названия лотов без повторов (как в «Мин. ценах»: регистр и пробелы по краям не важны)."""
+    seen, out = set(), []
+    for t in titles:
+        t = (t or "").strip()
+        k = t.lower()
+        if t and k not in seen:
+            seen.add(k)
+            out.append(t)
+    return out
+
+
 def scan_games(golden_key: str, user_agent: str = "") -> dict:
     """Сканирует профиль и возвращает разделы FunPay, в которых есть лоты."""
     key = (golden_key or "").strip()
@@ -201,6 +213,7 @@ def scan_games(golden_key: str, user_agent: str = "") -> dict:
             "fullname": getattr(subcategory, "fullname", subcategory.name),
             "link": getattr(subcategory, "public_link", ""),
             "lots": len(lots),
+            "lot_titles": unique_titles(lot.description for lot in lots.values()),
         })
 
     games.sort(key=lambda g: (g["game"], g["name"]))

@@ -148,8 +148,25 @@
     </div>`;
   };
 
+  const plural = (n, one, few, many) => {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  };
+
+  // сколько разных названий лотов уже заведено в мин. ценах
+  // (одинаковые лоты — это один товар, поэтому считаем по названиям, а не по лотам)
+  const coverage = (game, items) => {
+    const titles = game.lot_titles;
+    if (!Array.isArray(titles) || !titles.length) return null;
+    const done = titles.filter((t) => alreadyAdded(t, items)).length;
+    return { done, total: titles.length };
+  };
+
   const gameCard = (game) => {
     const items = state.items[game.key] || [];
+    const cov = coverage(game, items);
     const open = openGame === game.key;
     return `
       <div class="game ${open ? 'open' : ''} ${pickedGames.has(game.key) ? 'picked' : ''}" data-key="${esc(game.key)}">
@@ -159,9 +176,14 @@
           </label>
           <div class="game-name">
             <span class="gtitle">${esc(game.game || game.name)}</span>
-            <span class="gsub">${esc(game.name)}${game.lots ? ` · ${game.lots} лотов` : ''}</span>
+            <span class="gsub">${esc(game.name)}${game.lots
+              ? ` · ${game.lots} ${plural(game.lots, 'лот', 'лота', 'лотов')}` : ''}${
+              cov && cov.total < game.lots ? ` · ${cov.total} ${plural(cov.total, 'разный', 'разных', 'разных')}` : ''}</span>
           </div>
-          <span class="pill ${items.length ? 'on' : ''}">${items.length} товаров</span>
+          ${cov
+            ? `<span class="pill ${cov.done === cov.total ? 'on' : cov.done ? 'part' : ''}"
+                    title="товаров в мин. ценах: ${items.length}">заведено ${cov.done} из ${cov.total}</span>`
+            : `<span class="pill ${items.length ? 'on' : ''}">${items.length} ${plural(items.length, 'товар', 'товара', 'товаров')}</span>`}
           <button class="mini danger" data-delgame="${esc(game.key)}" title="Убрать игру">×</button>
           <span class="chev">${open ? '▾' : '▸'}</span>
         </div>
@@ -468,6 +490,7 @@
       try {
         const data = await api(`/api/pricing/lots?key=${encodeURIComponent(key)}`);
         lotsCache[key] = data.lots;
+        await reload();          // сервер обновил число лотов и их названия у игры
         renderLots(key);
         toast(`Лотов: ${data.count}`, 'good');
       } catch (err) {
@@ -555,10 +578,29 @@
     const box = document.querySelector(`[data-lotsbox="${key}"]`);
     if (!box) return;
     const items = state.items[key] || [];
-    box.innerHTML = (lotsCache[key] || []).map((lot) => `
+    const groups = [];
+    const byTitle = new Map();
+    (lotsCache[key] || []).forEach((lot) => {
+      const k = (lot.title || '').trim().toLowerCase();
+      if (!byTitle.has(k)) {
+        const g = { ...lot, count: 1, prices: [lot.price] };
+        byTitle.set(k, g);
+        groups.push(g);
+      } else {
+        const g = byTitle.get(k);
+        g.count += 1;
+        g.prices.push(lot.price);
+      }
+    });
+    const priceText = (g) => {
+      const lo = Math.min(...g.prices), hi = Math.max(...g.prices);
+      return lo === hi ? money(lo) : `${money(lo)}–${money(hi)}`;
+    };
+    box.innerHTML = groups.map((lot) => `
       <div class="lot" data-title="${esc(lot.title)}" data-lot="${esc(lot.id)}" data-price="${esc(lot.price)}">
-        <span class="ltitle">${esc(lot.title) || '<span class="muted">без названия</span>'}</span>
-        <span class="lprice">${money(lot.price)} ${esc(lot.currency)}</span>
+        <span class="ltitle">${esc(lot.title) || '<span class="muted">без названия</span>'}${
+          lot.count > 1 ? ` <span class="dup" title="одинаковые лоты — один закуп на все">×${lot.count} ${plural(lot.count, 'лот', 'лота', 'лотов')}</span>` : ''}</span>
+        <span class="lprice">${priceText(lot)} ${esc(lot.currency)}</span>
         ${alreadyAdded(lot.title || '', items)
           ? '<span class="pill on">уже в списке</span>'
           : `<input type="text" class="search narrow" data-lf="cost" inputmode="decimal" placeholder="закуп">
