@@ -112,14 +112,31 @@ def add_item(key: str, title: str, cost: float, keywords: str = "",
     return save(data)
 
 
-def update_item(item_id: str, fields: dict) -> dict:
-    data = load()
-    for items in data["items"].values():
+def get_item(item_id: str) -> tuple[str, dict] | None:
+    """(ключ игры, товар) или None."""
+    for key, items in load()["items"].items():
         for item in items:
             if item["id"] == item_id:
-                item.update({k: v for k, v in fields.items()
-                             if k in ("title", "cost", "keywords", "cost_cashback", "has_cashback")})
-                return save(data)
+                return key, item
+    return None
+
+
+def update_item(item_id: str, fields: dict) -> dict:
+    data = load()
+    for key, items in data["items"].items():
+        for item in items:
+            if item["id"] != item_id:
+                continue
+            title = fields.get("title")
+            if title is not None:
+                clash = next((i for i in items if i["id"] != item_id
+                              and i["title"].strip().lower() == title.strip().lower()), None)
+                if clash:
+                    raise ValueError(f"В этой игре уже есть товар «{clash['title']}»")
+            item.update({k: v for k, v in fields.items()
+                         if k in ("title", "cost", "keywords", "cost_cashback", "has_cashback")})
+            save(data)
+            return {"key": key, "item": item, "items": items}
     raise ValueError("Товар не найден")
 
 

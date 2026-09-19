@@ -4,6 +4,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import math
+import re
 import os
 import secrets
 import time
@@ -428,21 +430,12 @@ async def api_pricing_add_item(request: Request):
         return JSONResponse({"ok": False, "error": "Нужны раздел и название товара"}, status_code=400)
 
     try:
-        cost = float(str(body.get("cost")).replace(",", "."))
-    except (TypeError, ValueError):
-        return JSONResponse({"ok": False, "error": "Цена закупа должна быть числом"}, status_code=400)
-    if cost < 0:
-        return JSONResponse({"ok": False, "error": "Цена закупа не может быть отрицательной"}, status_code=400)
-
-    raw_cashback = str(body.get("cost_cashback") or "").strip()
-    cost_cashback = None
-    if raw_cashback:
-        try:
-            cost_cashback = float(raw_cashback.replace(",", "."))
-        except ValueError:
-            return JSONResponse({"ok": False, "error": "Цена с кэшбеком должна быть числом"}, status_code=400)
-        if cost_cashback < 0:
-            return JSONResponse({"ok": False, "error": "Цена с кэшбеком не может быть отрицательной"}, status_code=400)
+        cost = _money_field(body.get("cost") if body.get("cost") not in (None, "") else 0, "Цена закупа")
+        raw_cashback = str(body.get("cost_cashback") or "").strip()
+        cost_cashback = _money_field(raw_cashback, "Цена с кэшбеком") if raw_cashback else None
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    if cost_cashback is not None:
         if cost_cashback > cost:
             return JSONResponse(
                 {"ok": False, "error": "Цена с кэшбеком должна быть меньше обычной"}, status_code=400)
@@ -463,6 +456,59 @@ async def api_pricing_add_item(request: Request):
     return {"ok": True, "items": data["items"].get(key, [])}
 
 
+_MONEY_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
+
+
+def _money_field(value, name: str) -> float:
+    """Строгий разбор цены: только «123», «123.45» или «123,45».
+    float() сам по себе пропустил бы «2e3», «nan» и «inf»."""
+    raw = str(value).strip().replace(" ", "")
+    if not _MONEY_RE.match(raw):
+        raise ValueError(f"{name} должна быть числом, например 245 или 245.50")
+    number = float(raw.replace(",", "."))
+    if number < 0:
+        raise ValueError(f"{name} не может быть отрицательной")
+    return round(number, 2)
+
+
+@app.patch("/api/pricing/items/{item_id}", dependencies=[Depends(require_auth)])
+async def api_pricing_edit_item(item_id: str, request: Request):
+    """Правка товара: название, ключевые слова, закуп, цена с кэшбеком."""
+    found = pricing.get_item(item_id)
+    if not found:
+        return JSONResponse({"ok": False, "error": "Товар не найден"}, status_code=404)
+    _, current = found
+    body = await request.json()
+    fields: dict = {}
+    try:
+        if "title" in body:
+            title = str(body.get("title") or "").strip()
+            if not title:
+                raise ValueError("Название товара не может быть пустым")
+            fields["title"] = title
+        if "keywords" in body:
+            fields["keywords"] = str(body.get("keywords") or "").strip()
+        if "cost" in body:
+            fields["cost"] = _money_field(body.get("cost") or 0, "Цена закупа")
+        if "cost_cashback" in body:
+            raw = str(body.get("cost_cashback") if body.get("cost_cashback") is not None else "").strip()
+            if raw:
+                cb = _money_field(raw, "Цена с кэшбеком")
+                cost = fields.get("cost", float(current.get("cost") or 0))
+                if cb > cost:
+                    raise ValueError("Цена с кэшбеком должна быть меньше обычной")
+                fields.update({"cost_cashback": cb, "has_cashback": True})
+            else:
+                fields.update({"cost_cashback": None, "has_cashback": False})
+        elif "cost" in fields and current.get("has_cashback") \
+                and current.get("cost_cashback") is not None and current["cost_cashback"] > fields["cost"]:
+            raise ValueError("Новый закуп меньше цены с кэшбеком — поправь и её")
+        result = pricing.update_item(item_id, fields)
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, "item": result["item"], "items": result["items"]}
+
+
 @app.delete("/api/pricing/items/{item_id}", dependencies=[Depends(require_auth)])
 def api_pricing_remove_item(item_id: str):
     data = pricing.remove_item(item_id)
@@ -478,7 +524,7 @@ async def api_pricing_cashback_apply(request: Request):
         percent = float(str(body.get("percent")).replace(",", "."))
     except (TypeError, ValueError):
         return JSONResponse({"ok": False, "error": "Процент должен быть числом"}, status_code=400)
-    if not 0 < percent < 100:
+    if not math.isfinite(percent) or not 0 < percent < 100:
         return JSONResponse({"ok": False, "error": "Процент кэшбека — от 0 до 100"}, status_code=400)
     try:
         result = pricing.apply_cashback(key, percent, overwrite=bool(body.get("overwrite")))
@@ -494,7 +540,7 @@ async def api_pricing_fee(request: Request):
         fee = float(str(body.get("fee")).replace(",", "."))
     except (TypeError, ValueError):
         return JSONResponse({"ok": False, "error": "Комиссия должна быть числом"}, status_code=400)
-    if not 0 <= fee < 100:
+    if not math.isfinite(fee) or not 0 <= fee < 100:
         return JSONResponse({"ok": False, "error": "Комиссия должна быть от 0 до 100"}, status_code=400)
     return {"ok": True, "fee": pricing.set_fee(fee)["fee"]}
 
@@ -506,7 +552,7 @@ async def api_pricing_cashback_min(request: Request):
         value = float(str(body.get("cashback_min")).replace(",", "."))
     except (TypeError, ValueError):
         return JSONResponse({"ok": False, "error": "Порог должен быть числом"}, status_code=400)
-    if value < 0:
+    if not math.isfinite(value) or value < 0:
         return JSONResponse({"ok": False, "error": "Порог не может быть отрицательным"}, status_code=400)
     return {"ok": True, "cashback_min": pricing.set_cashback_min(value)["cashback_min"]}
 

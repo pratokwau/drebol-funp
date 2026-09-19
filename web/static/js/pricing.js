@@ -6,6 +6,7 @@
   let picked = new Set();  // выбранные в окне сканирования
   let openGame = null;     // раскрытая игра
   let pickedGames = new Set();  // отмеченные игры в списке
+  let editing = null;           // id товара, который сейчас правим
   const cbPercent = {};         // процент кэшбека для «применить ко всем», по игре
 
   // ---------------------------- кэшбек по правилу банка ----------------------------
@@ -45,7 +46,7 @@
   };
 
   const cbBulk = (game, items) => {
-    if (!items.some(hasCb)) return '';
+    if (!items.some((i) => Number(i.cost) > 0)) return '';
     const key = game.key;
     if (cbPercent[key] === undefined) cbPercent[key] = guessPercent(items, Number(state.cashbackMin)) ?? 1;
     return `
@@ -112,7 +113,23 @@
 
   // ---------------------------- список игр ----------------------------
 
+  const editRow = (item) => `
+    <div class="pitem editing" data-id="${esc(item.id)}">
+      <span class="ptitle edit-fields">
+        <input type="text" class="search" data-e="title" value="${esc(item.title)}" placeholder="Название товара">
+        <input type="text" class="search" data-e="keywords" value="${esc(item.keywords || '')}" placeholder="Слова для поиска (необязательно)">
+      </span>
+      <span class="pcost"><input type="text" class="search" data-e="cost" inputmode="decimal" value="${esc(item.cost ?? '')}" placeholder="закуп"></span>
+      <span class="pcost"><input type="text" class="search" data-e="cost_cashback" inputmode="decimal"
+            value="${esc(hasCb(item) ? item.cost_cashback : '')}" placeholder="нет"></span>
+      <span class="pactions">
+        <button class="mini ok" data-save="${esc(item.id)}" title="Сохранить (Enter)">✓</button>
+        <button class="mini" data-cancel title="Отмена (Esc)">↺</button>
+      </span>
+    </div>`;
+
   const itemRow = (item) => {
+    if (editing === item.id) return editRow(item);
     const cb = item.has_cashback && item.cost_cashback !== null && item.cost_cashback !== undefined;
     const below = cb && Number(item.cost) < Number(state.cashbackMin);
     const noCost = !Number(item.cost);
@@ -124,7 +141,10 @@
             title="${below ? `закуп меньше порога ${money(state.cashbackMin)} ₽ — кэшбек не применяется` : ''}">
         ${cb ? money(item.cost_cashback) + (below ? ' ⚠' : '') : '—'}
       </span>
-      <button class="mini danger" data-del="${esc(item.id)}" title="Удалить">×</button>
+      <span class="pactions">
+        <button class="mini" data-edit="${esc(item.id)}" title="Редактировать">✎</button>
+        <button class="mini danger" data-del="${esc(item.id)}" title="Удалить">×</button>
+      </span>
     </div>`;
   };
 
@@ -147,6 +167,8 @@
         </div>
 
         <div class="game-body" ${open ? '' : 'hidden'}>
+          ${cbBulk(game, items)}
+
           <div class="pitem head">
             <span class="ptitle">Товар</span>
             <span class="pcost">Закуп</span>
@@ -162,8 +184,6 @@
             <input type="text" class="search narrow" data-f="cost_cashback" inputmode="decimal" placeholder="С кэшбеком">
             <button class="btn primary" data-add="${esc(game.key)}"><span class="label">Добавить</span><span class="spinner"></span></button>
           </div>
-
-          ${cbBulk(game, items)}
 
           <div class="lots-block">
             <button class="btn ghost-btn" data-lots="${esc(game.key)}"><span class="label">Подтянуть лоты с FunPay</span><span class="spinner"></span></button>
@@ -373,6 +393,20 @@
       return;
     }
 
+    const edit = t.closest('[data-edit]');
+    if (edit) {
+      editing = edit.dataset.edit;
+      render();
+      const inp = document.querySelector('.pitem.editing [data-e="cost"]');
+      if (inp) { inp.focus(); inp.select(); }
+      return;
+    }
+
+    if (t.closest('[data-cancel]')) { editing = null; render(); return; }
+
+    const saveBtn = t.closest('[data-save]');
+    if (saveBtn) { await saveEdit(saveBtn); return; }
+
     const del = t.closest('[data-del]');
     if (del) {
       await api(`/api/pricing/items/${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE' });
@@ -484,6 +518,36 @@
       return contains(lot, it) || contains(it, lot);
     });
   };
+
+  const saveEdit = async (btn) => {
+    const row = btn.closest('.pitem.editing');
+    const val = (f) => row.querySelector(`[data-e="${f}"]`).value;
+    if (!val('title').trim()) { toast('Название не может быть пустым', 'bad'); return; }
+    btn.disabled = true;
+    try {
+      await api(`/api/pricing/items/${encodeURIComponent(btn.dataset.save)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: val('title'), keywords: val('keywords'),
+          cost: val('cost') || '0', cost_cashback: val('cost_cashback'),
+        }),
+      });
+      editing = null;
+      await reload();
+      toast('Товар сохранён', 'good');
+    } catch (err) {
+      if (err.message !== 'auth') toast(err.message, 'bad');
+      btn.disabled = false;
+    }
+  };
+
+  // Enter — сохранить, Esc — отменить
+  $('games').addEventListener('keydown', (e) => {
+    const row = e.target.closest('.pitem.editing');
+    if (!row) return;
+    if (e.key === 'Enter') { e.preventDefault(); saveEdit(row.querySelector('[data-save]')); }
+    if (e.key === 'Escape') { editing = null; render(); }
+  });
 
   const renderLots = (key) => {
     const box = document.querySelector(`[data-lotsbox="${key}"]`);
