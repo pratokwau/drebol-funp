@@ -357,6 +357,22 @@ async def api_orders_choice(request: Request):
     return {"ok": True, "id": order_id, "choice": choice}
 
 
+@app.post("/api/orders/choice-bulk", dependencies=[Depends(require_auth)])
+async def api_orders_choice_bulk(request: Request):
+    """Выбор «с кэшбеком / без» сразу для списка заказов."""
+    body = await request.json()
+    ids = [str(i).strip().lstrip("#") for i in (body.get("ids") or []) if str(i).strip()]
+    choice = body.get("choice")
+    if not ids:
+        return JSONResponse({"ok": False, "error": "Не выбрано ни одного заказа"}, status_code=400)
+    if len(ids) > 5000:
+        return JSONResponse({"ok": False, "error": "Слишком много заказов за раз"}, status_code=400)
+    if choice not in ("cashback", "plain", None):
+        return JSONResponse({"ok": False, "error": "Вариант: cashback или plain"}, status_code=400)
+    pricing.set_choices(ids, choice)
+    return {"ok": True, "count": len(ids), "choice": choice}
+
+
 @app.post("/api/orders/cost", dependencies=[Depends(require_auth)])
 async def api_orders_cost(request: Request):
     """Ручной закуп за весь заказ. Пустое значение — вернуть автоматический.

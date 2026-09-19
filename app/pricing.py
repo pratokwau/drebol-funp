@@ -254,11 +254,17 @@ def load_choices() -> dict:
 
 
 def set_choice(order_id: str, choice: str | None) -> dict:
+    return set_choices([order_id], choice)
+
+
+def set_choices(order_ids: list[str], choice: str | None) -> dict:
+    """Один и тот же выбор сразу для нескольких заказов — одна запись файла."""
     choices = load_choices()
-    if choice in ("cashback", "plain"):
-        choices[str(order_id)] = choice
-    else:
-        choices.pop(str(order_id), None)
+    for order_id in order_ids:
+        if choice in ("cashback", "plain"):
+            choices[str(order_id)] = choice
+        else:
+            choices.pop(str(order_id), None)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = CHOICES_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(choices, ensure_ascii=False), encoding="utf-8")

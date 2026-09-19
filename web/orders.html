@@ -52,8 +52,38 @@
       </div>
 
       <div class="orders-tools">
-        <input type="search" id="filter" class="search" placeholder="Фильтр по загруженным: товар, покупатель, № заказа">
+        <input type="search" id="filter" class="search" placeholder="Поиск по загруженным: товар, покупатель, № заказа">
+        <select id="sort" class="select">
+          <option value="new">Сначала новые</option>
+          <option value="old">Сначала старые</option>
+          <option value="profit_desc">Прибыль: больше</option>
+          <option value="profit_asc">Прибыль: меньше</option>
+          <option value="price_desc">Сумма: больше</option>
+        </select>
         <button class="btn ghost-btn" id="reloadBtn"><span class="label">Обновить</span><span class="spinner"></span></button>
+      </div>
+
+      <div class="order-filters">
+        <div class="chips small" id="statusChips">
+          <button data-st="all">Все</button>
+          <button data-st="paid">Оплачены</button>
+          <button data-st="closed">Закрыты</button>
+          <button data-st="refund">Возвраты</button>
+        </div>
+        <div class="chips small" id="costChips">
+          <button data-cf="all">Любой закуп</button>
+          <button data-cf="undecided">Выбрать кэшбек</button>
+          <button data-cf="nocost">Без закупа</button>
+          <button data-cf="loss">В минус</button>
+          <button data-cf="manual">Закуп вручную</button>
+          <button data-cf="cashback">С кэшбеком</button>
+        </div>
+      </div>
+
+      <div class="bulk-choice" id="bulkChoice" hidden>
+        <span id="bulkInfo">—</span>
+        <button class="btn ghost-btn" data-bulk="cashback"><span class="label">Всем — с кэшбеком</span><span class="spinner"></span></button>
+        <button class="btn ghost-btn" data-bulk="plain"><span class="label">Всем — без кэшбека</span><span class="spinner"></span></button>
       </div>
 
       <div class="orders" id="list"></div>

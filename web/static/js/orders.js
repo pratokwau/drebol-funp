@@ -46,6 +46,54 @@
   // две цены закупа — выбираешь, какая пошла в этот заказ
   let editingCost = null;   // номер заказа, где сейчас правят закуп
 
+  // ---------------------------- фильтры и сортировка ----------------------------
+  const FKEY = 'drebol-orders-filters';
+  const flt = (() => {
+    try { return { st: 'all', cf: 'all', sort: 'new', ...JSON.parse(localStorage.getItem(FKEY) || '{}') }; }
+    catch { return { st: 'all', cf: 'all', sort: 'new' }; }
+  })();
+  const saveFlt = () => { try { localStorage.setItem(FKEY, JSON.stringify(flt)); } catch { /* приватный режим */ } };
+
+  const needsChoice = (o) => !!o.variants && !o.choice && !o.manual && !o.refunded;
+  const STATUS = {
+    all: () => true,
+    paid: (o) => o.status_code === 'paid',
+    closed: (o) => o.status_code === 'closed',
+    refund: (o) => !!o.refunded,
+  };
+  const COST = {
+    all: () => true,
+    undecided: needsChoice,
+    nocost: (o) => o.profit === null && !o.refunded,
+    loss: (o) => o.profit !== null && o.profit < 0,
+    manual: (o) => o.manual && !o.refunded,
+    cashback: (o) => !!o.cashback_used,
+  };
+  const matchesText = (o, q) => !q
+    || [o.title, o.buyer, o.id, o.category, o.matched].some((f) => String(f ?? '').toLowerCase().includes(q));
+  const SORT = {
+    new: (a, b) => String(b.date).localeCompare(String(a.date)),
+    old: (a, b) => String(a.date).localeCompare(String(b.date)),
+    profit_desc: (a, b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity),
+    profit_asc: (a, b) => (a.profit ?? Infinity) - (b.profit ?? Infinity),
+    price_desc: (a, b) => (b.price || 0) - (a.price || 0),
+  };
+
+  const paintChips = (q) => {
+    document.querySelectorAll('#statusChips [data-st]').forEach((b) => {
+      const n = all.filter((o) => STATUS[b.dataset.st](o) && COST[flt.cf](o) && matchesText(o, q)).length;
+      b.classList.toggle('on', b.dataset.st === flt.st);
+      b.dataset.count = n;
+      b.innerHTML = `${esc(b.textContent.replace(/\s*\d+$/, ''))} <span class="cnt">${n}</span>`;
+    });
+    document.querySelectorAll('#costChips [data-cf]').forEach((b) => {
+      const n = all.filter((o) => COST[b.dataset.cf](o) && STATUS[flt.st](o) && matchesText(o, q)).length;
+      b.classList.toggle('on', b.dataset.cf === flt.cf);
+      b.classList.toggle('attention', b.dataset.cf === 'undecided' && n > 0);
+      b.innerHTML = `${esc(b.textContent.replace(/\s*\d+$/, ''))} <span class="cnt">${n}</span>`;
+    });
+  };
+
   const costPick = (o) => {
     if (!o.variants || o.refunded || o.manual) return '';
     const btn = (key, label) => `
@@ -143,15 +191,22 @@
 
   const render = () => {
     const q = $('filter').value.trim().toLowerCase();
-    const shown = q
-      ? all.filter((o) =>
-          [o.title, o.buyer, o.id, o.category].some((f) => String(f ?? '').toLowerCase().includes(q)))
-      : all;
+    const shown = all
+      .filter((o) => STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q))
+      .sort(SORT[flt.sort] || SORT.new);
+    const filtered = q || flt.st !== 'all' || flt.cf !== 'all';
 
+    paintChips(q);
+    $('sort').value = flt.sort;
     $('list').innerHTML = shown.map(row).join('');
-    $('cntPill').textContent = q
+    $('cntPill').textContent = filtered
       ? `${shown.length} из ${all.length}`
       : `загружено ${all.length}`;
+
+    // массовый выбор — для показанных заказов, где он ещё нужен
+    const pending = shown.filter(needsChoice);
+    $('bulkChoice').hidden = !pending.length;
+    $('bulkInfo').textContent = `Не выбран закуп в ${pending.length} ${pending.length === 1 ? 'заказе' : 'заказах'} из показанных:`;
 
     const sum = shown.reduce((acc, o) => acc + (Number(o.price) || 0), 0);
     const cur = shown.length ? shown[0].currency : '';
@@ -174,7 +229,8 @@
       empty.innerHTML = '<p class="muted">Заказов нет.</p>';
     } else if (!shown.length) {
       empty.hidden = false;
-      empty.innerHTML = '<p class="muted">Под фильтр ничего не подошло.</p>';
+      empty.innerHTML = `<p class="muted">Под фильтр ничего не подошло${
+        flt.st !== 'all' || flt.cf !== 'all' ? ' — попробуй «Все» или загрузи ещё заказов' : ''}.</p>`;
     } else {
       empty.hidden = true;
     }
@@ -224,6 +280,45 @@
   });
 
   $('filter').addEventListener('input', render);
+
+  $('sort').addEventListener('change', () => { flt.sort = $('sort').value; saveFlt(); render(); });
+  $('statusChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-st]');
+    if (!b) return;
+    flt.st = b.dataset.st; saveFlt(); render();
+  });
+  $('costChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cf]');
+    if (!b) return;
+    flt.cf = b.dataset.cf; saveFlt(); render();
+  });
+
+  $('bulkChoice').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-bulk]');
+    if (!btn) return;
+    const q = $('filter').value.trim().toLowerCase();
+    const targets = all.filter((o) => STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q) && needsChoice(o));
+    if (!targets.length) return;
+    const label = btn.dataset.bulk === 'cashback' ? 'с кэшбеком' : 'без кэшбека';
+    if (!confirm(`Поставить закуп «${label}» в ${targets.length} заказах?`)) return;
+    btn.classList.add('loading'); btn.disabled = true;
+    try {
+      const res = await fetch('/api/orders/choice-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: targets.map((o) => o.id), choice: btn.dataset.bulk }),
+      });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.error || 'не сохранилось');
+      targets.forEach((o) => applyChoice(o, btn.dataset.bulk));
+      render();
+      toast(`${targets.length} заказов — закуп ${label}`, 'good');
+    } catch (err) {
+      toast(`Не сохранилось: ${err.message}`, 'bad');
+    }
+    btn.classList.remove('loading'); btn.disabled = false;
+  });
 
   const saveCost = async (id, value) => {
     const o = all.find((x) => String(x.id) === String(id));

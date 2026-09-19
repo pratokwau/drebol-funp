@@ -746,3 +746,16 @@ table.data .neg{color:#ff8095}
 .link-btn:hover{color:var(--ink)}
 .muted-hint{color:var(--muted)!important}
 .order .oprofit.refund{color:#ff8095;font-weight:500;font-size:12px}
+
+/* ---------- фильтры заказов ---------- */
+.order-filters{display:flex;flex-direction:column;gap:8px;margin:-4px 0 14px}
+.chips button .cnt{margin-left:4px;font-size:11px;opacity:.65;font-variant-numeric:tabular-nums}
+.chips button.attention{border-color:rgba(250,178,25,.5);color:#fab219}
+.chips button.attention.on{background:rgba(250,178,25,.18);color:#ffd27a;border-color:rgba(250,178,25,.7)}
+.bulk-choice{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;padding:11px 14px;border-radius:12px;
+  border:1px solid rgba(250,178,25,.35);background:rgba(250,178,25,.07);font-size:13px;
+}
+.bulk-choice span{margin-right:auto}
+.bulk-choice .btn{height:34px;padding:0 13px;font-size:12.5px}
+.orders-tools .select{height:42px}
