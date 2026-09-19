@@ -89,12 +89,11 @@ def _money(v: float) -> float:
     return round(v, 2)
 
 
-def report(period: str = "30d", date_from: str = "", date_to: str = "", mode: str = "cashback",
+def report(period: str = "30d", date_from: str = "", date_to: str = "",
            statuses: str = "closed,paid", game: str = "", only_matched: bool = False,
            group: str = "", now: datetime | None = None) -> dict:
     now = now or datetime.now()
     period = period if period in PERIODS else "30d"
-    mode = "plain" if mode == "plain" else "cashback"
     wanted = {s for s in statuses.split(",") if s in STATUS_KEYS} or {"closed", "paid"}
 
     cache = orders_store.load()
@@ -124,13 +123,12 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "", mode: st
     if only_matched:
         picked = [o for o in picked if o.get("matched")]
 
+    # закуп уже выбран по каждому заказу (с кэшбеком или без) в pricing.apply_to_orders
     def profit_of(o: dict) -> float | None:
-        p = o.get("profit_cashback") if mode == "cashback" else o.get("profit")
-        return p
+        return o.get("profit")
 
     def cost_of(o: dict) -> float:
-        c = o.get("cost_cashback") if mode == "cashback" else o.get("cost")
-        return float(c or 0)
+        return float(o.get("cost") or 0)
 
     def summarize(rows: list[dict]) -> dict:
         matched = [o for o in rows if profit_of(o) is not None]
@@ -140,7 +138,8 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "", mode: st
         m_net = sum(float(o.get("net") or 0) for o in matched)
         cost = sum(cost_of(o) for o in matched)
         profit = sum(profit_of(o) for o in matched)
-        saved = sum((o.get("profit_cashback") or 0) - (o.get("profit") or 0) for o in matched)
+        saved = sum(o["variants"]["plain"] - o["variants"]["cashback"]
+                    for o in matched if o.get("cashback_used") and o.get("variants"))
         return {
             "orders": len(rows),
             "revenue": _money(revenue),
@@ -157,6 +156,7 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "", mode: st
             "avg_profit": _money(profit / len(matched)) if matched else 0,
             "zero_cost": sum(1 for o in matched if not cost_of(o)),
             "cashback_orders": sum(1 for o in matched if o.get("cashback_used")),
+            "undecided": sum(1 for o in matched if o.get("variants") and not o.get("choice")),
             "cashback_saved": _money(saved),
             "loss_orders": sum(1 for o in matched if profit_of(o) < 0),
             "net_matched": _money(m_net),
@@ -256,7 +256,6 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "", mode: st
         "period": {"key": period, "label": PERIODS[period],
                    "from": a.isoformat() if a else (first_date.isoformat() if first_date else None),
                    "to": b.isoformat()},
-        "mode": mode,
         "statuses": sorted(wanted),
         "group": grp,
         "game": game,

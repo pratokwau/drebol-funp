@@ -16,7 +16,7 @@
   };
 
   const defaults = {
-    period: '30d', from: '', to: '', mode: 'cashback',
+    period: '30d', from: '', to: '',
     statuses: ['closed', 'paid'], game: '', group: '', onlyMatched: false,
   };
   let f = (() => {
@@ -87,7 +87,6 @@
     $('customRange').hidden = f.period !== 'custom';
     $('dateFrom').value = f.from;
     $('dateTo').value = f.to;
-    document.querySelectorAll('#modeTabs [data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === f.mode));
     document.querySelectorAll('#statuses [data-s]').forEach((b) => b.classList.toggle('on', f.statuses.includes(b.dataset.s)));
     $('group').value = f.group;
     $('onlyMatched').checked = f.onlyMatched;
@@ -106,9 +105,6 @@
   }));
   ['dateFrom', 'dateTo'].forEach((id) => $(id).addEventListener('change', () => {
     f.from = $('dateFrom').value; f.to = $('dateTo').value; changed();
-  }));
-  document.querySelectorAll('#modeTabs [data-mode]').forEach((b) => b.addEventListener('click', () => {
-    f.mode = b.dataset.mode; changed();
   }));
   document.querySelectorAll('#statuses [data-s]').forEach((b) => b.addEventListener('click', () => {
     const s = b.dataset.s;
@@ -133,7 +129,7 @@
   // ---------------------------- отчёт ----------------------------
   const load = async () => {
     const q = new URLSearchParams({
-      period: f.period, date_from: f.from, date_to: f.to, mode: f.mode,
+      period: f.period, date_from: f.from, date_to: f.to,
       statuses: f.statuses.join(','), game: f.game, group: f.group, only_matched: f.onlyMatched,
     });
     $('report').classList.add('refetch');     // держим прошлую картинку, без скелетонов
@@ -187,7 +183,7 @@
 
   const renderHero = (r) => {
     const t = r.totals;
-    $('heroLabel').textContent = `Чистая прибыль · ${periodText(r)} · ${r.mode === 'cashback' ? 'с кэшбеком' : 'без кэшбека'}`;
+    $('heroLabel').textContent = `Чистая прибыль · ${periodText(r)}`;
     $('heroValue').textContent = signed(t.profit);
     $('heroValue').className = `hero-value ${t.profit < 0 ? 'neg' : ''}`;
 
@@ -222,11 +218,13 @@
     const parts = [];
     if (t.unmatched) parts.push(`${int(t.unmatched)} из ${int(t.orders)} заказов без закупа — в прибыль не вошли`);
     if (t.zero_cost) parts.push(`${int(t.zero_cost)} с нулевым закупом`);
+    if (t.undecided) parts.push(`в ${int(t.undecided)} не выбран закуп с кэшбеком или без — посчитаны без кэшбека`);
     warn.hidden = !parts.length;
     if (parts.length) {
-      warn.replaceChildren(el('span', 'icon', '⚠'), el('span', '', `${parts.join(', ')}.`));
-      const a = el('a', '', 'Заведи цены в «Мин. ценах» →');
-      a.href = '/pricing';
+      warn.replaceChildren(el('span', 'icon', '⚠'), el('span', '', `${parts.join('; ')}.`));
+      const onlyChoice = !t.unmatched && !t.zero_cost;
+      const a = el('a', '', onlyChoice ? 'Выбрать в «Заказах» →' : 'Заведи цены в «Мин. ценах» →');
+      a.href = onlyChoice ? '/orders' : '/pricing';
       warn.append(a);
     }
   };
@@ -240,7 +238,7 @@
       ['Маржа', pct(t.margin), 'прибыль / выручка'],
       ['ROI', pct(t.roi), 'прибыль / закуп'],
       ['Средний чек', rub(t.avg_check), `прибыль с заказа ${rub(t.avg_profit)}`],
-      ['Кэшбек дал', rub(t.cashback_saved), `в ${int(t.cashback_orders)} заказах`],
+      ['Кэшбек дал', rub(t.cashback_saved), `в ${int(t.cashback_orders)} заказах${t.undecided ? ` · не выбрано ${int(t.undecided)}` : ''}`],
       ['Возвраты', rub(r.refunds.sum), `${int(r.refunds.count)} шт за период`],
       ['В минус', int(t.loss_orders), 'убыточных продаж'],
     ];

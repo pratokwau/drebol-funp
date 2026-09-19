@@ -341,6 +341,20 @@ def api_orders(start_from: str = ""):
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
+@app.post("/api/orders/choice", dependencies=[Depends(require_auth)])
+async def api_orders_choice(request: Request):
+    """Какой закуп пошёл в заказ: с кэшбеком или без. null — сбросить выбор."""
+    body = await request.json()
+    order_id = str(body.get("id") or "").strip().lstrip("#")
+    choice = body.get("choice")
+    if not order_id:
+        return JSONResponse({"ok": False, "error": "Не указан заказ"}, status_code=400)
+    if choice not in ("cashback", "plain", None):
+        return JSONResponse({"ok": False, "error": "Вариант: cashback или plain"}, status_code=400)
+    pricing.set_choice(order_id, choice)
+    return {"ok": True, "id": order_id, "choice": choice}
+
+
 # ---------------------------- мин. цены ----------------------------
 
 
@@ -455,6 +469,24 @@ def api_pricing_remove_item(item_id: str):
     return {"ok": True, "items": data["items"]}
 
 
+@app.post("/api/pricing/cashback-apply", dependencies=[Depends(require_auth)])
+async def api_pricing_cashback_apply(request: Request):
+    """Цена с кэшбеком всем товарам игры: процент, округление вниз до рубля, от порога."""
+    body = await request.json()
+    key = str(body.get("key") or "")
+    try:
+        percent = float(str(body.get("percent")).replace(",", "."))
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "Процент должен быть числом"}, status_code=400)
+    if not 0 < percent < 100:
+        return JSONResponse({"ok": False, "error": "Процент кэшбека — от 0 до 100"}, status_code=400)
+    try:
+        result = pricing.apply_cashback(key, percent, overwrite=bool(body.get("overwrite")))
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, **result}
+
+
 @app.post("/api/pricing/fee", dependencies=[Depends(require_auth)])
 async def api_pricing_fee(request: Request):
     body = await request.json()
@@ -484,9 +516,9 @@ async def api_pricing_cashback_min(request: Request):
 
 @app.get("/api/profit/report", dependencies=[Depends(require_auth)])
 def api_profit_report(period: str = "30d", date_from: str = "", date_to: str = "",
-                      mode: str = "cashback", statuses: str = "closed,paid", game: str = "",
+                      statuses: str = "closed,paid", game: str = "",
                       only_matched: bool = False, group: str = ""):
-    return analytics.report(period, date_from, date_to, mode, statuses, game, only_matched, group)
+    return analytics.report(period, date_from, date_to, statuses, game, only_matched, group)
 
 
 @app.get("/api/profit/sync", dependencies=[Depends(require_auth)])

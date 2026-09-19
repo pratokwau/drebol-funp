@@ -683,3 +683,33 @@ table.data .neg{color:#ff8095}
   .panel-head > *{max-width:100%;flex-shrink:1}
   .orders-sum,.fee-row,.tabs{flex-wrap:wrap}
 }
+
+
+/* ---------- выбор закупа в заказе ---------- */
+.order{cursor:default}
+.order:hover{transform:none}
+.order a{color:inherit;text-decoration:none}
+.order a:hover{text-decoration:underline}
+.order .oid{color:var(--muted)}
+.cost-pick{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.cp-label{font-size:11.5px;color:var(--muted)}
+.cp{
+  border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--muted);
+  font-family:inherit;font-size:11.5px;padding:4px 9px;border-radius:8px;cursor:pointer;
+  transition:color .2s,background .2s,border-color .2s;
+}
+.cp b{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:500;color:var(--ink)}
+.cp:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+.cp.on{border-color:rgba(124,92,255,.65);background:rgba(124,92,255,.22);color:#fff}
+.cost-pick.undecided .cp{border-color:rgba(250,178,25,.35)}
+.cp-hint{font-size:11px;color:#fab219}
+
+/* ---------- кэшбек на всю игру ---------- */
+.cb-bulk{margin-top:16px;padding:13px 14px;border-radius:12px;border:1px solid rgba(57,135,229,.3);background:rgba(57,135,229,.06)}
+.cb-line{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.cb-line + .cb-line{margin-top:10px}
+.cb-line .btn{margin-left:auto;height:36px;padding:0 14px}
+.cb-title{font-size:13.5px;font-weight:600}
+.cb-line .muted{font-size:12px}
+.search.tiny{flex:0 0 70px;min-width:60px;height:34px;text-align:center;font-family:'JetBrains Mono',ui-monospace,monospace}
+.cb-preview{font-size:12px;margin-top:10px}

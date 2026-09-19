@@ -4,16 +4,17 @@
   let nextFrom = null;
   let loading = false;
   let all = [];
-  let cashbackMin = 100;
-  // режим расчёта запоминаем в браузере
-  let mode = (() => {
-    try { return localStorage.getItem('drebol-orders-mode') || 'cashback'; } catch { return 'cashback'; }
-  })();
+  // закуп по заказу уже посчитан сервером с учётом выбора «с кэшбеком / без»
+  const pick = (o) => ({ profit: o.profit, cost: o.cost, cb: o.cashback_used });
 
-  // прибыль и закуп в выбранном режиме
-  const pick = (o) => (mode === 'cashback' && o.profit_cashback !== null && o.profit_cashback !== undefined
-    ? { profit: o.profit_cashback, cost: o.cost_cashback, cb: o.cashback_used }
-    : { profit: o.profit, cost: o.cost, cb: false });
+  // пересчёт на месте после клика по варианту закупа
+  const applyChoice = (o, choice) => {
+    o.choice = choice;
+    const cost = choice === 'cashback' ? o.variants.cashback : o.variants.plain;
+    o.cost = cost;
+    o.cashback_used = choice === 'cashback';
+    o.profit = Math.round((o.net - cost) * 100) / 100;
+  };
 
   const toast = (msg, kind = '') => {
     toastEl.textContent = msg;
@@ -42,15 +43,32 @@
     btn.disabled = on;
   };
 
+  // две цены закупа — выбираешь, какая пошла в этот заказ
+  const costPick = (o) => {
+    if (!o.variants) return '';
+    const btn = (key, label) => `
+      <button class="cp ${o.choice === key ? 'on' : ''}" data-choice="${key}" data-id="${esc(o.id)}"
+              title="${o.choice === key ? 'нажми ещё раз, чтобы сбросить' : 'посчитать заказ с этим закупом'}">
+        ${label} <b>${money(o.variants[key])}</b>
+      </button>`;
+    return `
+      <span class="cost-pick ${o.choice ? '' : 'undecided'}">
+        <span class="cp-label">Закуп:</span>
+        ${btn('cashback', 'с кэшбеком')}${btn('plain', 'без кэшбека')}
+        ${o.choice ? '' : '<span class="cp-hint">не выбран — считаю без кэшбека</span>'}
+      </span>`;
+  };
+
   const row = (o) => {
     const p = pick(o);
     return `
-    <a class="order" href="${esc(o.link)}" target="_blank" rel="noopener noreferrer">
-      <span class="oid">#${esc(o.id)}</span>
+    <div class="order" data-row="${esc(o.id)}">
+      <a class="oid" href="${esc(o.link)}" target="_blank" rel="noopener noreferrer">#${esc(o.id)}</a>
       <span class="otitle">
-        ${esc(o.title) || '<span class="muted">без описания</span>'}
+        <a href="${esc(o.link)}" target="_blank" rel="noopener noreferrer">${esc(o.title) || '<span class="muted">без описания</span>'}</a>
         <span class="ocat">${esc(o.category || '')}${o.amount && o.amount > 1 ? ` · ${o.amount} шт` : ''}${
           o.matched ? ` · закуп по «${esc(o.matched)}»` : ''}</span>
+        ${costPick(o)}
       </span>
       <span class="obuyer">${esc(o.buyer)}</span>
       <span class="ostatus st-${esc(o.status_code)}">${esc(o.status)}</span>
@@ -66,17 +84,19 @@
           o.matched && !p.cost ? '<span class="warndot" title="закуп не задан">⚠</span>' : ''}
       </span>
       <span class="odate">${when(o.date)}</span>
-    </a>`;
+    </div>`;
   };
 
   const paintFoot = () => {
     if (!all.length) return;
     const noMatch = all.filter((o) => o.profit === null).length;
     const withCb = all.filter((o) => o.cashback_used).length;
+    const undecided = all.filter((o) => o.variants && !o.choice).length;
     const zeroCost = all.filter((o) => o.matched && !pick(o).cost).length;
     const tail = (noMatch ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».` : '')
       + (zeroCost ? ` С нулевым закупом: ${zeroCost} — проставь цены в «Мин. ценах».` : '')
-      + (mode === 'cashback' && withCb ? ` С кэшбеком посчитано: ${withCb} (порог ${money(cashbackMin)}).` : '');
+      + (undecided ? ` Не выбран вариант закупа: ${undecided} — пока считаю без кэшбека.` : '')
+      + (withCb ? ` С кэшбеком: ${withCb}.` : '');
     $('footHint').textContent = (nextFrom
       ? `Показано ${all.length}. Есть ещё — жми кнопку.`
       : `Это все заказы: ${all.length}.`) + tail;
@@ -141,7 +161,6 @@
 
       all = all.concat(data.orders);
       nextFrom = data.next;
-      if (data.cashback_min !== undefined) cashbackMin = data.cashback_min;
       render();
 
       $('moreBtn').hidden = !nextFrom;
@@ -167,15 +186,33 @@
 
   $('filter').addEventListener('input', render);
 
-  document.querySelectorAll('[data-cb]').forEach((tab) => {
-    tab.classList.toggle('active', tab.dataset.cb === mode);
-    tab.addEventListener('click', () => {
-      mode = tab.dataset.cb;
-      try { localStorage.setItem('drebol-orders-mode', mode); } catch { /* приватный режим */ }
-      document.querySelectorAll('[data-cb]').forEach((b) => b.classList.toggle('active', b.dataset.cb === mode));
+  $('list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-choice]');
+    if (!btn) return;
+    const o = all.find((x) => String(x.id) === btn.dataset.id);
+    if (!o || !o.variants) return;
+
+    // повторный клик по выбранному — сброс
+    const next = o.choice === btn.dataset.choice ? null : btn.dataset.choice;
+    const prev = { choice: o.choice, cost: o.cost, profit: o.profit, cashback_used: o.cashback_used };
+    applyChoice(o, next);
+    render();
+    try {
+      const res = await fetch('/api/orders/choice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: o.id, choice: next }),
+      });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.error || 'не сохранилось');
+      toast(next === 'cashback' ? `#${o.id}: закуп с кэшбеком`
+        : next === 'plain' ? `#${o.id}: закуп без кэшбека` : `#${o.id}: выбор сброшен`, 'good');
+    } catch (err) {
+      Object.assign(o, prev);   // откатываем, если сервер не сохранил
       render();
-      toast(mode === 'cashback' ? 'Считаю с кэшбеком' : 'Считаю без кэшбека');
-    });
+      toast(`Не сохранилось: ${err.message}`, 'bad');
+    }
   });
 
   $('logout').addEventListener('click', async () => {

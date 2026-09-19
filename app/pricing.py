@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 FILE = DATA_DIR / "pricing.json"
+CHOICES_FILE = DATA_DIR / "cost_choices.json"   # номер заказа -> "cashback" | "plain"
 
 DEFAULTS: dict = {
     "fee": 3.0,            # комиссия FunPay, %
@@ -140,16 +142,84 @@ def set_cashback_min(value: float) -> dict:
     return save(data)
 
 
-def effective_cost(item: dict, cashback_min: float) -> tuple[float, bool]:
-    """Цена закупа с учётом кэшбека и порога. Возвращает (цена, кэшбек применён)."""
+def variants(item: dict, cashback_min: float) -> tuple[float, float | None]:
+    """Цены закупа товара: (без кэшбека, с кэшбеком или None).
+
+    Второй вариант есть, только если он задан и покупка не меньше порога:
+    банк не начисляет кэшбек на покупки дешевле cashback_min.
+    """
     plain = float(item.get("cost") or 0)
     cashback = item.get("cost_cashback")
+    if not item.get("has_cashback") or cashback is None or plain < cashback_min:
+        return plain, None
+    return plain, float(cashback)
 
-    if not item.get("has_cashback") or cashback is None:
-        return plain, False
-    if plain < cashback_min:       # покупка меньше порога — банк кэшбек не даст
-        return plain, False
-    return float(cashback), True
+
+def cashback_price(cost: float, percent: float, cashback_min: float) -> float | None:
+    """Цена с кэшбеком так, как считает банк: процент от покупки,
+    округлённый вниз до целого рубля, и только от порога.
+    764.75 при 1% -> кэшбек 7 ₽ -> 757.75."""
+    if cost < cashback_min or percent <= 0:
+        return None
+    back = math.floor(round(cost * percent / 100, 6))
+    if back <= 0:
+        return None
+    return round(cost - back, 2)
+
+
+def apply_cashback(key: str, percent: float, overwrite: bool = False) -> dict:
+    """Проставляет цену с кэшбеком всем товарам игры по одному проценту."""
+    data = load()
+    cashback_min = float(data.get("cashback_min") or 0)
+    items = data["items"].get(key)
+    if items is None:
+        raise ValueError("Такой игры нет в списке")
+
+    stats = {"applied": 0, "below_min": 0, "kept": 0, "no_cost": 0}
+    for item in items:
+        cost = float(item.get("cost") or 0)
+        if not cost:
+            stats["no_cost"] += 1
+            continue
+        if item.get("has_cashback") and item.get("cost_cashback") is not None and not overwrite:
+            stats["kept"] += 1
+            continue
+        price = cashback_price(cost, percent, cashback_min)
+        if price is None:
+            stats["below_min"] += 1
+            continue
+        item["cost_cashback"] = price
+        item["has_cashback"] = True
+        stats["applied"] += 1
+
+    save(data)
+    return {**stats, "items": data["items"][key]}
+
+
+# ---------------------------- выбор закупа по заказу ----------------------------
+
+
+def load_choices() -> dict:
+    if CHOICES_FILE.exists():
+        try:
+            return json.loads(CHOICES_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def set_choice(order_id: str, choice: str | None) -> dict:
+    choices = load_choices()
+    if choice in ("cashback", "plain"):
+        choices[str(order_id)] = choice
+    else:
+        choices.pop(str(order_id), None)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = CHOICES_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(choices, ensure_ascii=False), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(CHOICES_FILE)
+    return choices
 
 
 # ---------------------------- сопоставление ----------------------------
@@ -211,10 +281,15 @@ def match(order_title: str, items: list[dict]) -> dict | None:
 
 
 def apply_to_orders(orders: list[dict]) -> list[dict]:
-    """Дополняет заказы себестоимостью и прибылью — сразу в двух вариантах:
-    по обычной цене закупа и по цене с кэшбеком."""
+    """Дополняет заказы закупом и чистой прибылью.
+
+    Если у товара две цены закупа (с кэшбеком и без), какая из них пошла
+    в заказ, выбирает пользователь. Пока не выбрал — считаем без кэшбека,
+    чтобы прибыль не оказалась завышенной.
+    """
     data = load()
     items = _all_items(data)
+    choices = load_choices()
     fee = float(data.get("fee") or 0) / 100
     cashback_min = float(data.get("cashback_min") or 0)
 
@@ -225,21 +300,22 @@ def apply_to_orders(orders: list[dict]) -> list[dict]:
         order["net"] = round(net, 2)
 
         if not item:
-            order.update({
-                "cost": None, "cost_cashback": None, "profit": None,
-                "profit_cashback": None, "cashback_used": False, "matched": None,
-            })
+            order.update({"cost": None, "profit": None, "matched": None,
+                          "variants": None, "choice": None, "cashback_used": False})
             continue
 
         amount = order.get("amount") or 1
-        plain = float(item.get("cost") or 0)
-        with_cb, used = effective_cost(item, cashback_min)
+        plain, cashback = variants(item, cashback_min)
+        choice = choices.get(str(order.get("id"))) if cashback is not None else None
+        use_cb = choice == "cashback"
+        cost = (cashback if use_cb else plain) * amount
 
-        order["cost"] = round(plain * amount, 2)
-        order["cost_cashback"] = round(with_cb * amount, 2)
-        order["profit"] = round(net - plain * amount, 2)
-        order["profit_cashback"] = round(net - with_cb * amount, 2)
-        order["cashback_used"] = used
         order["matched"] = item["title"]
+        order["variants"] = ({"plain": round(plain * amount, 2), "cashback": round(cashback * amount, 2)}
+                             if cashback is not None else None)
+        order["choice"] = choice
+        order["cashback_used"] = use_cb
+        order["cost"] = round(cost, 2)
+        order["profit"] = round(net - cost, 2)
 
     return orders

@@ -6,6 +6,79 @@
   let picked = new Set();  // выбранные в окне сканирования
   let openGame = null;     // раскрытая игра
   let pickedGames = new Set();  // отмеченные игры в списке
+  const cbPercent = {};         // процент кэшбека для «применить ко всем», по игре
+
+  // ---------------------------- кэшбек по правилу банка ----------------------------
+  // процент от покупки, округление вниз до рубля, только от порога: 764.75 при 1% -> 757.75
+  const cbPrice = (cost, pct, min) => {
+    if (!(cost >= min) || !(pct > 0)) return null;
+    const back = Math.floor(Math.round(cost * pct / 100 * 1e6) / 1e6);
+    return back > 0 ? Math.round((cost - back) * 100) / 100 : null;
+  };
+  const hasCb = (i) => i.has_cashback && i.cost_cashback !== null && i.cost_cashback !== undefined;
+
+  // угадываем процент по товарам, где обе цены уже введены
+  const guessPercent = (items, min) => {
+    const ex = items.filter((i) => hasCb(i) && Number(i.cost) >= min);
+    if (!ex.length) return null;
+    const standard = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 15, 20];
+    let best = null, bestFits = 0;
+    standard.forEach((pct) => {
+      const fits = ex.filter((i) => cbPrice(Number(i.cost), pct, min) === Number(i.cost_cashback)).length;
+      if (fits > bestFits) { best = pct; bestFits = fits; }
+    });
+    if (best !== null) return best;
+    const avg = ex.reduce((a, i) => a + (i.cost - i.cost_cashback) / i.cost * 100, 0) / ex.length;
+    return Math.round(avg * 100) / 100;
+  };
+
+  const cbPreview = (items, pct, min, overwrite) => {
+    const st = { applied: 0, below: 0, kept: 0, noCost: 0 };
+    items.forEach((i) => {
+      const cost = Number(i.cost);
+      if (!cost) st.noCost += 1;
+      else if (hasCb(i) && !overwrite) st.kept += 1;
+      else if (cbPrice(cost, pct, min) === null) st.below += 1;
+      else st.applied += 1;
+    });
+    return st;
+  };
+
+  const cbBulk = (game, items) => {
+    if (!items.some(hasCb)) return '';
+    const key = game.key;
+    if (cbPercent[key] === undefined) cbPercent[key] = guessPercent(items, Number(state.cashbackMin)) ?? 1;
+    return `
+      <div class="cb-bulk" data-cbbox="${esc(key)}">
+        <div class="cb-line">
+          <span class="cb-title">Кэшбек для всей игры</span>
+          <input type="text" class="search tiny" inputmode="decimal" data-cbp="${esc(key)}" value="${esc(cbPercent[key])}">
+          <span class="muted">% · округление вниз до рубля · от ${money(state.cashbackMin)} ₽</span>
+        </div>
+        <div class="cb-line">
+          <label class="check"><input type="checkbox" data-cbover="${esc(key)}"><span>перезаписать уже заданные</span></label>
+          <button class="btn ghost-btn" data-cbapply="${esc(key)}"><span class="label">Применить ко всем товарам</span><span class="spinner"></span></button>
+        </div>
+        <p class="cb-preview muted" data-cbprev="${esc(key)}"></p>
+      </div>`;
+  };
+
+  const paintCbPreview = (key) => {
+    const box = document.querySelector(`[data-cbbox="${key}"]`);
+    if (!box) return;
+    const items = state.items[key] || [];
+    const pct = Number(String(box.querySelector('[data-cbp]').value).replace(',', '.'));
+    const over = box.querySelector('[data-cbover]').checked;
+    const out = box.querySelector('[data-cbprev]');
+    if (!(pct > 0 && pct < 100)) { out.textContent = 'Введи процент от 0 до 100.'; return; }
+    const st = cbPreview(items, pct, Number(state.cashbackMin), over);
+    const ex = items.find((i) => Number(i.cost) >= Number(state.cashbackMin));
+    const sample = ex ? ` Например: ${money(ex.cost)} → ${money(cbPrice(Number(ex.cost), pct, Number(state.cashbackMin)))}.` : '';
+    out.textContent = `Получат цену с кэшбеком: ${st.applied}`
+      + (st.below ? ` · дешевле порога или кэшбек меньше рубля: ${st.below}` : '')
+      + (st.kept ? ` · уже заданы, не трогаю: ${st.kept}` : '')
+      + (st.noCost ? ` · без закупа: ${st.noCost}` : '') + `.${sample}`;
+  };
   let lotsCache = {};      // лоты с FunPay по ключу игры
 
   const toast = (msg, kind = '') => {
@@ -90,6 +163,8 @@
             <button class="btn primary" data-add="${esc(game.key)}"><span class="label">Добавить</span><span class="spinner"></span></button>
           </div>
 
+          ${cbBulk(game, items)}
+
           <div class="lots-block">
             <button class="btn ghost-btn" data-lots="${esc(game.key)}"><span class="label">Подтянуть лоты с FunPay</span><span class="spinner"></span></button>
             <div class="lots" data-lotsbox="${esc(game.key)}"></div>
@@ -116,6 +191,7 @@
     $('fee').value = state.fee;
     $('cashbackMin').value = state.cashbackMin;
     $('games').innerHTML = state.games.map(gameCard).join('');
+    if (openGame) paintCbPreview(openGame);
     paintBulk();
     const all = Object.values(state.items).flat();
     const total = all.length;
@@ -254,7 +330,16 @@
     busy(btn, false);
   });
 
+  $('games').addEventListener('input', (e) => {
+    const inp = e.target.closest('[data-cbp]');
+    if (!inp) return;
+    cbPercent[inp.dataset.cbp] = inp.value;
+    paintCbPreview(inp.dataset.cbp);
+  });
+
   $('games').addEventListener('change', (e) => {
+    const over = e.target.closest('[data-cbover]');
+    if (over) { paintCbPreview(over.dataset.cbover); return; }
     const pick = e.target.closest('[data-pick]');
     if (!pick) return;
     pick.checked ? pickedGames.add(pick.dataset.pick) : pickedGames.delete(pick.dataset.pick);
@@ -318,6 +403,27 @@
         if (err.message !== 'auth') toast(err.message, 'bad');
       }
       busy(add, false);
+      return;
+    }
+
+    const cbApply = t.closest('[data-cbapply]');
+    if (cbApply) {
+      const key = cbApply.dataset.cbapply;
+      const box = cbApply.closest('.cb-bulk');
+      const percent = String(box.querySelector('[data-cbp]').value).replace(',', '.');
+      const overwrite = box.querySelector('[data-cbover]').checked;
+      if (overwrite && !confirm('Перезаписать цены с кэшбеком, заданные вручную?')) return;
+      busy(cbApply, true);
+      try {
+        const r = await api('/api/pricing/cashback-apply', {
+          method: 'POST', body: JSON.stringify({ key, percent, overwrite }),
+        });
+        await reload();
+        toast(`Кэшбек ${percent}% проставлен: ${r.applied} товаров${r.kept ? `, не тронуты ${r.kept}` : ''}`, 'good');
+      } catch (err) {
+        if (err.message !== 'auth') toast(err.message, 'bad');
+      }
+      busy(cbApply, false);
       return;
     }
 
