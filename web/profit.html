@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>drebol-funp — прибыль</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="app-page">
+  <div class="bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="grid"></div>
+    <div class="noise"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="logo small">
+      <span class="logo-mark">DF</span>
+      <h1>drebol<span>funp</span></h1>
+    </div>
+    <nav class="nav">
+      <a href="/">Панель</a>
+      <a href="/profit" class="active">Прибыль</a>
+      <a href="/orders">Заказы</a>
+      <a href="/pricing">Мин. цены</a>
+      <a href="/calc">Калькулятор</a>
+      <a href="/settings">Настройки</a>
+    </nav>
+    <div class="topbar-right">
+      <span class="user" id="user">admin</span>
+      <button class="ghost" id="logout">Выйти</button>
+    </div>
+  </header>
+
+  <main class="content wide profit-page">
+
+    <!-- база заказов -->
+    <section class="panel sync-panel" style="--i:1">
+      <div class="panel-head">
+        <div>
+          <h2>Прибыль</h2>
+          <p class="muted" id="syncInfo">Загружаю базу заказов...</p>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="syncBtn"><span class="label">Обновить заказы</span><span class="spinner"></span></button>
+          <button class="btn ghost-btn" id="fullBtn"><span class="label">Загрузить всю историю</span><span class="spinner"></span></button>
+        </div>
+      </div>
+      <div class="sync-bar" id="syncBar" hidden><span></span></div>
+    </section>
+
+    <!-- фильтры: одна строка над всем, что они задают -->
+    <section class="filters" style="--i:2">
+      <div class="chips" id="periods">
+        <button data-p="today">Сегодня</button>
+        <button data-p="yesterday">Вчера</button>
+        <button data-p="7d">7 дней</button>
+        <button data-p="30d">30 дней</button>
+        <button data-p="90d">90 дней</button>
+        <button data-p="month">Этот месяц</button>
+        <button data-p="prev_month">Прошлый месяц</button>
+        <button data-p="year">Год</button>
+        <button data-p="all">Всё время</button>
+        <button data-p="custom">Свой период</button>
+      </div>
+      <div class="custom-range" id="customRange" hidden>
+        <input type="date" id="dateFrom"> <span class="muted">—</span> <input type="date" id="dateTo">
+      </div>
+
+      <div class="filter-row">
+        <div class="tabs" id="modeTabs">
+          <button class="tab" data-mode="cashback">С кэшбеком</button>
+          <button class="tab" data-mode="plain">Без кэшбека</button>
+        </div>
+
+        <div class="chips small" id="statuses">
+          <button data-s="closed">Закрытые</button>
+          <button data-s="paid">Оплаченные</button>
+          <button data-s="refunded">Возвраты</button>
+        </div>
+
+        <select id="game" class="select"><option value="">Все разделы</option></select>
+
+        <select id="group" class="select">
+          <option value="">Шаг: авто</option>
+          <option value="day">По дням</option>
+          <option value="week">По неделям</option>
+          <option value="month">По месяцам</option>
+        </select>
+
+        <label class="check"><input type="checkbox" id="onlyMatched"><span>Только с закупом</span></label>
+      </div>
+    </section>
+
+    <div id="report" class="report">
+      <!-- главное число -->
+      <section class="panel hero" style="--i:3">
+        <div class="hero-main">
+          <span class="hero-label" id="heroLabel">Чистая прибыль</span>
+          <span class="hero-value" id="heroValue">—</span>
+          <span class="hero-delta" id="heroDelta"></span>
+        </div>
+        <div class="hero-side" id="heroSide"></div>
+      </section>
+
+      <div class="warn-bar" id="warnBar" hidden></div>
+
+      <!-- показатели -->
+      <section class="kpis" id="kpis"></section>
+
+      <!-- динамика -->
+      <section class="panel chart-card" style="--i:4">
+        <div class="chart-head">
+          <div>
+            <h3 id="trendTitle">Прибыль по дням</h3>
+            <p class="muted small-note" id="trendNote"></p>
+          </div>
+          <div class="tabs" id="metricTabs">
+            <button class="tab active" data-m="profit">Прибыль</button>
+            <button class="tab" data-m="revenue">Выручка</button>
+            <button class="tab" data-m="orders">Заказы</button>
+          </div>
+        </div>
+        <div class="chart" id="trend"></div>
+        <button class="mini-btn table-toggle" data-table="trendTable">Показать таблицей</button>
+        <div class="table-wrap" id="trendTable" hidden></div>
+      </section>
+
+      <div class="two-col">
+        <section class="panel chart-card">
+          <div class="chart-head"><div><h3>Товары</h3><p class="muted small-note">по прибыли, сопоставлено с «Мин. ценами»</p></div></div>
+          <div class="table-wrap" id="products"></div>
+        </section>
+        <section class="panel chart-card">
+          <div class="chart-head"><div><h3>Разделы</h3><p class="muted small-note">игры и категории FunPay</p></div></div>
+          <div class="table-wrap" id="games"></div>
+        </section>
+      </div>
+
+      <section class="panel chart-card">
+        <div class="chart-head">
+          <div><h3>Когда покупают</h3><p class="muted small-note">число заказов по дню недели и часу</p></div>
+        </div>
+        <div class="heat" id="heat"></div>
+        <div class="heat-legend" id="heatLegend"></div>
+      </section>
+
+      <div class="two-col">
+        <section class="panel chart-card">
+          <div class="chart-head"><div><h3>Покупатели</h3><p class="muted small-note">топ-10 по прибыли</p></div></div>
+          <div class="table-wrap" id="buyers"></div>
+        </section>
+        <section class="panel chart-card">
+          <div class="chart-head"><div><h3>Убыточные продажи</h3><p class="muted small-note">худшие 10 за период</p></div></div>
+          <div class="table-wrap" id="losses"></div>
+        </section>
+      </div>
+
+      <section class="panel chart-card" id="unmatchedCard" hidden>
+        <div class="chart-head">
+          <div><h3>Продажи без закупа</h3><p class="muted small-note">не учтены в прибыли — заведи их в «Мин. ценах»</p></div>
+          <a class="btn ghost-btn" href="/pricing">Открыть мин. цены</a>
+        </div>
+        <div class="table-wrap" id="unmatched"></div>
+      </section>
+    </div>
+
+    <div class="empty-state" id="emptyState" hidden></div>
+  </main>
+
+  <div class="viz-tip" id="tip" hidden></div>
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/profit.js"></script>
+</body>
+</html>

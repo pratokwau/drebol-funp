@@ -534,3 +534,152 @@ code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;backgr
 .pcost.zero{color:#ffc14d;font-weight:500;font-size:12.5px}
 .order .oprofit.warn{color:#ffc14d}
 .warndot{margin-left:5px;color:#ffc14d;font-size:12px}
+
+/* ---------- прибыль ---------- */
+.profit-page .panel + .panel{margin-top:16px}
+.sync-panel .panel-head{margin-bottom:0}
+.sync-bar{margin-top:16px;height:3px;border-radius:3px;background:var(--line);overflow:hidden}
+.sync-bar span{display:block;height:100%;width:35%;background:#3987e5;border-radius:3px;animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+
+.filters{display:flex;flex-direction:column;gap:12px;margin:16px 0;animation:rise .5s both}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{
+  border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--muted);
+  font-family:inherit;font-size:12.5px;font-weight:500;padding:7px 13px;border-radius:999px;cursor:pointer;
+  transition:color .2s,background .2s,border-color .2s;
+}
+.chips button:hover{color:var(--ink);background:rgba(255,255,255,.07)}
+.chips button.on{color:#fff;border-color:rgba(124,92,255,.6);background:rgba(124,92,255,.22)}
+.chips.small button{padding:6px 11px}
+.filter-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.custom-range{display:flex;align-items:center;gap:8px}
+.custom-range input,.select{
+  height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line);
+  background:rgba(255,255,255,.035);color:var(--ink);font-family:inherit;font-size:13px;outline:none;color-scheme:dark;
+}
+.select{max-width:260px;cursor:pointer}
+.select option{background:#16161c}
+
+.report{transition:opacity .2s}
+.report.refetch{opacity:.55;pointer-events:none}
+
+.hero{display:flex;gap:28px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.hero-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.hero-label{font-size:13px;color:var(--muted)}
+.hero-value{font-size:52px;font-weight:700;letter-spacing:-1.5px;line-height:1.05}
+.hero-value.neg{color:#ff8095}
+.hero-delta{font-size:13px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.delta{display:inline-flex;gap:5px;align-items:center;font-weight:600}
+.delta.up{color:#4ade80}
+.delta.down{color:#ff8095}
+.delta .arrow{font-size:10px}
+.hero-side{display:flex;flex-direction:column;gap:4px;min-width:280px;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,.025);border:1px solid var(--line)}
+.eq{display:flex;justify-content:space-between;gap:20px;font-size:13px}
+.eq .k{color:var(--muted)}
+.eq .v{font-variant-numeric:tabular-nums}
+.eq.total{margin-top:4px;padding-top:8px;border-top:1px solid var(--line);font-weight:600}
+
+.warn-bar{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding:12px 16px;border-radius:12px;
+  border:1px solid rgba(250,178,25,.35);background:rgba(250,178,25,.08);font-size:13px;
+}
+.warn-bar .icon{color:#fab219}
+.warn-bar a{margin-left:auto;color:#fab219;text-decoration:none;font-weight:500}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:16px}
+.kpi{
+  display:flex;flex-direction:column;gap:5px;padding:15px 16px;border-radius:14px;
+  border:1px solid var(--line);background:linear-gradient(180deg,rgba(20,20,26,.72),rgba(10,10,14,.72));
+  animation:rise .45s both;animation-delay:calc(.03s * var(--i));
+}
+.kpi-label{font-size:12px;color:var(--muted)}
+.kpi-value{font-size:20px;font-weight:600;letter-spacing:-.3px}
+.kpi-sub{font-size:11.5px;color:var(--muted)}
+
+.chart-card{margin-top:16px}
+.chart-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.chart-head h3{font-size:15px;font-weight:600}
+.small-note{font-size:12px;margin-top:3px}
+.chart{width:100%;min-height:280px}
+.chart svg{display:block}
+.chart .axis{fill:#8a8d9b;font-size:11px;font-family:'Inter',sans-serif;font-variant-numeric:tabular-nums}
+.chart .val{fill:#f2f3f7;font-size:11.5px;font-weight:600;font-family:'Inter',sans-serif}
+.chart .bar{transition:opacity .15s}
+.chart .hit{cursor:pointer;outline:none}
+.chart .hit:hover,.chart .hit:focus{fill:rgba(255,255,255,.035)}
+.table-toggle{margin:10px 0 0}
+.table-wrap{overflow-x:auto}
+.table-wrap[hidden]{display:none}
+.two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.two-col > *{min-width:0}   /* иначе широкая таблица распирает колонку и всю страницу */
+.two-col .chart-card{margin-top:16px}
+
+table.data{width:100%;border-collapse:collapse;font-size:13px}
+table.data th{
+  text-align:left;font-weight:500;font-size:11.5px;color:var(--muted);
+  padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+table.data td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+table.data tr:last-child td{border-bottom:0}
+table.data td.num,table.data th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.data td.name{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.data td.name a{color:var(--ink);text-decoration:none}
+table.data td.name a:hover{text-decoration:underline}
+table.data td.name .sub{display:block;font-size:11px;color:var(--muted)}
+table.data .neg{color:#ff8095}
+.bar-cell{min-width:190px}
+.bar-wrap{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.bar-wrap .track{flex:1;min-width:44px;max-width:90px;height:8px;display:flex}
+.inbar{display:block;height:100%;background:#3987e5;border-radius:0 4px 4px 0}
+.inbar.neg{background:#e66767}
+.bar-wrap .v{min-width:96px;text-align:right}
+
+.heat{display:grid;grid-template-columns:34px repeat(24,minmax(0,1fr)) 54px;gap:3px;align-items:center}
+.heat .hh{font-size:10.5px;color:var(--muted);text-align:left;font-variant-numeric:tabular-nums}
+.heat .hh.total,.heat .ht{text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.heat .hl{font-size:11.5px;color:var(--muted)}
+.heat .hc{height:24px;border-radius:4px;cursor:pointer;outline:none;transition:transform .12s}
+.heat .hc:hover,.heat .hc:focus{transform:scale(1.18);box-shadow:0 0 0 2px #101015}
+.heat-legend{display:flex;align-items:center;gap:4px;margin-top:14px;font-size:11.5px}
+.heat-legend .sw{width:22px;height:12px;border-radius:3px}
+.heat-legend .muted:last-child{margin-left:6px}
+
+.viz-tip{
+  position:fixed;z-index:80;pointer-events:none;min-width:130px;
+  padding:9px 12px;border-radius:10px;background:rgba(20,20,26,.97);
+  border:1px solid rgba(255,255,255,.1);box-shadow:0 12px 32px rgba(0,0,0,.55);
+}
+.tip-row{display:flex;align-items:center;gap:8px}
+.tip-key{width:12px;height:3px;border-radius:2px;flex-shrink:0}
+.tip-value{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.tip-label{font-size:12px;color:var(--muted);margin-top:2px}
+.tip-extra{font-size:11.5px;color:var(--muted)}
+
+.empty-state{margin-top:16px;padding:48px 24px;text-align:center;border:1px dashed var(--line);border-radius:18px}
+.empty-state h3{font-size:18px;margin-bottom:8px}
+
+@media (max-width:960px){.two-col{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){
+  .hero-value{font-size:40px}
+  .hero-side{min-width:0;width:100%}
+  .heat{grid-template-columns:28px repeat(24,minmax(0,1fr)) 36px;gap:2px}
+  .heat .hc{height:16px}
+}
+
+/* ---------- телефон: меню не должно распирать страницу ---------- */
+@media (max-width:760px){
+  .topbar{flex-wrap:wrap;gap:10px;padding:12px 16px}
+  .nav{order:3;width:100%;margin:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{white-space:nowrap;flex-shrink:0}
+  .content{padding:20px 16px 48px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi-value{font-size:17px}
+  .sync-panel .actions{width:100%}
+  .sync-panel .actions .btn{flex:1}
+  /* правый блок заголовка (вкладки, плашки, поля) уходит на новую строку */
+  .panel-head{flex-wrap:wrap}
+  .panel-head > *{max-width:100%;flex-shrink:1}
+  .orders-sum,.fee-row,.tabs{flex-wrap:wrap}
+}

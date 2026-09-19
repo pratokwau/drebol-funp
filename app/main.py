@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import funpay, pricing, store, updater
+from . import analytics, funpay, orders_store, pricing, store, updater
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
@@ -144,6 +144,13 @@ async def settings_page(request: Request):
     if not verify(request.cookies.get(COOKIE_NAME)):
         return RedirectResponse("/login", status_code=302)
     return FileResponse(WEB_DIR / "settings.html")
+
+
+@app.get("/profit")
+async def profit_page(request: Request):
+    if not verify(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(WEB_DIR / "profit.html")
 
 
 @app.get("/pricing")
@@ -470,3 +477,33 @@ async def api_pricing_cashback_min(request: Request):
     if value < 0:
         return JSONResponse({"ok": False, "error": "Порог не может быть отрицательным"}, status_code=400)
     return {"ok": True, "cashback_min": pricing.set_cashback_min(value)["cashback_min"]}
+
+
+# ---------------------------- прибыль ----------------------------
+
+
+@app.get("/api/profit/report", dependencies=[Depends(require_auth)])
+def api_profit_report(period: str = "30d", date_from: str = "", date_to: str = "",
+                      mode: str = "cashback", statuses: str = "closed,paid", game: str = "",
+                      only_matched: bool = False, group: str = ""):
+    return analytics.report(period, date_from, date_to, mode, statuses, game, only_matched, group)
+
+
+@app.get("/api/profit/sync", dependencies=[Depends(require_auth)])
+def api_profit_sync_status():
+    return {"ok": True, **orders_store.status()}
+
+
+@app.post("/api/profit/sync", dependencies=[Depends(require_auth)])
+async def api_profit_sync(request: Request):
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    result = orders_store.start_sync(full=bool(body.get("full")))
+    return JSONResponse(result, status_code=200 if result["ok"] else 409)
+
+
+@app.delete("/api/profit/cache", dependencies=[Depends(require_auth)])
+def api_profit_cache_clear():
+    if orders_store.status()["running"]:
+        return JSONResponse({"ok": False, "error": "Дождись конца синхронизации"}, status_code=409)
+    orders_store.clear()
+    return {"ok": True}
