@@ -112,6 +112,43 @@
 
   </main>
 
+    <section class="panel danger-zone" style="--i:7">
+      <div class="panel-head">
+        <div>
+          <h2>Очистка данных</h2>
+          <p class="muted">Стереть и завести заново, если что-то насчиталось неправильно. Golden key и логотип не трогаются.</p>
+        </div>
+      </div>
+      <div class="wipe-row">
+        <div class="brand-info">
+          <span class="brand-name">Мин. цены</span>
+          <span class="muted">игры, товары и цены закупа</span>
+        </div>
+        <button class="btn danger" data-wipe="pricing"><span class="label">Очистить</span><span class="spinner"></span></button>
+      </div>
+      <div class="wipe-row">
+        <div class="brand-info">
+          <span class="brand-name">База заказов</span>
+          <span class="muted">локальная копия продаж для вкладки «Прибыль», скачается заново</span>
+        </div>
+        <button class="btn danger" data-wipe="orders"><span class="label">Очистить</span><span class="spinner"></span></button>
+      </div>
+      <div class="wipe-row">
+        <div class="brand-info">
+          <span class="brand-name">Решения по заказам</span>
+          <span class="muted">выбор «с кэшбеком / без» и ручные закупы</span>
+        </div>
+        <button class="btn danger" data-wipe="decisions"><span class="label">Сбросить</span><span class="spinner"></span></button>
+      </div>
+      <div class="wipe-row">
+        <div class="brand-info">
+          <span class="brand-name">Всё сразу</span>
+          <span class="muted">три пункта выше за один раз</span>
+        </div>
+        <button class="btn danger" data-wipe="all"><span class="label">Очистить всё</span><span class="spinner"></span></button>
+      </div>
+    </section>
+
   <div class="toast" id="toast"></div>
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/brand.js"></script>

@@ -163,6 +163,42 @@
 
   $('checkBtn').addEventListener('click', () => fetchAccount($('checkBtn')));
 
+  // ---------- очистка данных ----------
+  const WIPE = {
+    pricing: { url: '/api/pricing', method: 'DELETE',
+      ask: 'Удалить все игры и товары из «Мин. цен»? Цены закупа придётся заводить заново.',
+      done: 'Мин. цены очищены' },
+    orders: { url: '/api/profit/cache', method: 'DELETE',
+      ask: 'Удалить локальную базу заказов? Её можно скачать заново во вкладке «Прибыль».',
+      done: 'База заказов очищена' },
+    decisions: { url: '/api/orders/decisions', method: 'DELETE',
+      ask: 'Сбросить выбор «с кэшбеком / без» и ручные закупы во всех заказах?',
+      done: 'Решения по заказам сброшены' },
+  };
+
+  document.querySelectorAll('[data-wipe]').forEach((btn) => btn.addEventListener('click', async () => {
+    const kind = btn.dataset.wipe;
+    const steps = kind === 'all' ? ['pricing', 'orders', 'decisions'] : [kind];
+    const ask = kind === 'all'
+      ? 'Очистить всё: мин. цены, базу заказов и решения по заказам? Настройки FunPay и логотип останутся.'
+      : WIPE[kind].ask;
+    if (!confirm(ask)) return;
+
+    busy(btn, true);
+    try {
+      for (const step of steps) {
+        const res = await fetch(WIPE[step].url, { method: WIPE[step].method });
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        const data = await res.json().catch(() => ({}));
+        if (!data.ok) throw new Error(data.error || 'не удалось очистить');
+      }
+      toast(kind === 'all' ? 'Всё очищено' : WIPE[kind].done, 'good');
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+    busy(btn, false);
+  }));
+
   // ---------- логотип сайта ----------
   const brandRow = (title, file, note, preview) => {
     const row = el('div', 'brand-row');

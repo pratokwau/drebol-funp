@@ -240,6 +240,20 @@ def apply_cashback(key: str, percent: float, overwrite: bool = False) -> dict:
     return {**stats, "items": data["items"][key]}
 
 
+def reset_catalog() -> dict:
+    """Стирает игры и товары, оставляя комиссию и порог кэшбека."""
+    data = load()
+    data["games"], data["items"] = [], {}
+    return save(data)
+
+
+def reset_decisions() -> None:
+    """Стирает выборы «с кэшбеком / без» и ручные закупы по заказам."""
+    for path in (CHOICES_FILE, OVERRIDES_FILE):
+        if path.exists():
+            path.unlink()
+
+
 # ---------------------------- ручной закуп в заказе ----------------------------
 
 

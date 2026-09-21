@@ -508,6 +508,20 @@ async def api_pricing_remove_games(request: Request):
     return {"ok": True, "games": data["games"], "removed": len(keys)}
 
 
+@app.delete("/api/pricing", dependencies=[Depends(require_auth)])
+def api_pricing_reset():
+    """Удаляет все игры и товары. Комиссия и порог кэшбека остаются."""
+    data = pricing.reset_catalog()
+    return {"ok": True, "games": data["games"], "items": data["items"]}
+
+
+@app.delete("/api/orders/decisions", dependencies=[Depends(require_auth)])
+def api_orders_decisions_reset():
+    """Сбрасывает выбор «с кэшбеком / без» и ручные закупы во всех заказах."""
+    pricing.reset_decisions()
+    return {"ok": True}
+
+
 @app.get("/api/pricing/lots", dependencies=[Depends(require_auth)])
 def api_pricing_lots(key: str = ""):
     settings = store.load()
