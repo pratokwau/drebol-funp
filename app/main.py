@@ -619,6 +619,40 @@ async def api_pricing_edit_item(item_id: str, request: Request):
     return {"ok": True, "item": result["item"], "items": result["items"]}
 
 
+@app.post("/api/pricing/items/bulk", dependencies=[Depends(require_auth)])
+async def api_pricing_add_items(request: Request):
+    """Пачка товаров за раз — чтобы заполнить весь список лотов и сохранить одной кнопкой."""
+    body = await request.json()
+    key = str(body.get("key") or "")
+    rows, errors = [], []
+
+    for raw in (body.get("items") or []):
+        title = str(raw.get("title") or "").strip()
+        if not title:
+            continue
+        try:
+            cost = _money_field(raw.get("cost") if raw.get("cost") not in (None, "") else 0, "Цена закупа")
+            cashback_raw = str(raw.get("cost_cashback") or "").strip()
+            cashback = _money_field(cashback_raw, "Цена с кэшбеком") if cashback_raw else None
+            if cashback is not None and cashback > cost:
+                raise ValueError("Цена с кэшбеком должна быть меньше обычной")
+        except ValueError as e:
+            errors.append(f"{title}: {e}")
+            continue
+        rows.append({"title": title, "cost": cost, "keywords": str(raw.get("keywords") or ""),
+                     "lot_id": raw.get("lot_id"), "price": raw.get("price"),
+                     "cost_cashback": cashback, "has_cashback": cashback is not None})
+
+    if not rows:
+        return JSONResponse({"ok": False, "error": errors[0] if errors else "Нечего сохранять",
+                             "errors": errors}, status_code=400)
+    try:
+        result = pricing.add_items(key, rows)
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+    return {"ok": True, **result, "errors": errors}
+
+
 @app.delete("/api/pricing/items/{item_id}", dependencies=[Depends(require_auth)])
 def api_pricing_remove_item(item_id: str):
     data = pricing.remove_item(item_id)

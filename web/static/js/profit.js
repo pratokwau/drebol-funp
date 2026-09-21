@@ -343,21 +343,29 @@
         add('text', { x: cx, y: v >= 0 ? y(v) - 7 : y(v) + 15, 'text-anchor': 'middle', class: 'val' }, m.tick(v));
       }
 
-      // зона наведения — вся полоса, а не только столбик
-      const hit = add('rect', {
-        x: pad.l + band * i, y: pad.t, width: band, height: H - pad.t - pad.b,
-        fill: 'transparent', tabindex: 0, class: 'hit',
-      });
+      // зона наведения — вся полоса, а не только столбик.
+      // данные кладём в сам элемент: на телефоне сотни обработчиков заметно тормозят
       const extra = [];
       if (metric !== 'orders') extra.push(`заказов: ${int(row.orders)}`);
       if (metric === 'profit' && row.matched < row.orders) extra.push(`с закупом: ${int(row.matched)} из ${int(row.orders)}`);
       if (metric !== 'revenue') extra.push(`выручка: ${rub(row.revenue)}`);
-      const show = (e) => showTip(e, m.fmt(v), row.label, color, extra);
-      hit.addEventListener('pointermove', show);
-      hit.addEventListener('focus', show);
-      hit.addEventListener('pointerleave', hideTip);
-      hit.addEventListener('blur', hideTip);
+      add('rect', {
+        x: pad.l + band * i, y: pad.t, width: band, height: H - pad.t - pad.b,
+        fill: 'transparent', tabindex: 0, class: 'hit',
+        'data-value': m.fmt(v), 'data-label': row.label, 'data-color': color,
+        'data-extra': extra.join('|'),
+      });
     });
+
+    const tipFromEl = (e, el) => showTip(e, el.dataset.value, el.dataset.label, el.dataset.color,
+      el.dataset.extra ? el.dataset.extra.split('|') : []);
+    svg.addEventListener('pointermove', (e) => {
+      const hit = e.target.closest('.hit');
+      if (hit) tipFromEl(e, hit); else hideTip();
+    });
+    svg.addEventListener('pointerleave', hideTip);
+    svg.addEventListener('focusin', (e) => { if (e.target.classList.contains('hit')) tipFromEl(e, e.target); });
+    svg.addEventListener('focusout', hideTip);
 
     host.append(svg);
 
@@ -376,18 +384,23 @@
   };
 
   // ---------------------------- таблицы с полосками ----------------------------
-  const renderTable = (id, rows, firstCol, emptyText) => {
+  const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
+
+  const renderTable = (id, rows, firstCol, emptyText, expanded = false) => {
     const host = $(id);
     host.replaceChildren();
     if (!rows.length) { host.append(el('p', 'muted pad', emptyText)); return; }
 
+    // на телефоне длинные таблицы рисуем частями — иначе страница еле ворочается
+    const limit = isPhone() && !expanded ? 8 : rows.length;
+    const visible = rows.slice(0, limit);
     const maxAbs = Math.max(...rows.map((r) => Math.abs(r.profit)), 1);
     const table = el('table', 'data');
     const head = el('tr');
     [firstCol, 'Продаж', 'Выручка', 'Прибыль', 'Маржа'].forEach((h) => head.append(el('th', '', h)));
     table.append(head);
 
-    rows.forEach((r) => {
+    visible.forEach((r) => {
       const tr = el('tr');
       const name = el('td', 'name', r.name);
       name.title = r.name;
@@ -406,6 +419,12 @@
       table.append(tr);
     });
     host.append(table);
+
+    if (rows.length > visible.length) {
+      const more = el('button', 'mini-btn', `Показать все (${rows.length})`);
+      more.addEventListener('click', () => renderTable(id, rows, firstCol, emptyText, true));
+      host.append(more);
+    }
   };
 
   const renderLosses = (rows) => {
@@ -449,36 +468,57 @@
   const renderHeat = (r) => {
     const host = $('heat');
     host.replaceChildren();
-    const max = Math.max(...r.heat.flat(), 0);
+
+    // на телефоне 24 колонки дают ячейку в 8px — склеиваем часы по два
+    const span = isPhone() ? 2 : 1;
+    const cols = 24 / span;
+    const heat = r.heat.map((row) => Array.from({ length: cols }, (_, i) =>
+      row.slice(i * span, i * span + span).reduce((a, b) => a + b, 0)));
+    host.style.gridTemplateColumns = `var(--hl) repeat(${cols}, minmax(0, 1fr)) var(--ht)`;
+    const max = Math.max(...heat.flat(), 0);
     const step = (v) => (v <= 0 ? -1 : Math.min(C.ramp.length - 1, Math.floor(((v - 1) / Math.max(1, max)) * C.ramp.length)));
 
     host.append(el('span', 'hl'));
-    for (let h = 0; h < 24; h++) host.append(el('span', 'hh', h % 3 === 0 ? String(h) : ''));
+    for (let i = 0; i < cols; i++) {
+      const hour = i * span;
+      host.append(el('span', 'hh', hour % (span === 1 ? 3 : 6) === 0 ? String(hour) : ''));
+    }
     host.append(el('span', 'hh total', 'всего'));
 
-    r.heat.forEach((row, d) => {
+    heat.forEach((row, d) => {
       host.append(el('span', 'hl', r.weekdays[d].name));
       row.forEach((v, h) => {
         const cell = el('span', 'hc');
         const s = step(v);
         cell.style.background = s < 0 ? C.empty : C.ramp[s];
         cell.tabIndex = 0;
-        const label = `${r.weekdays[d].name}, ${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`;
-        const show = (e) => showTip(e, `${int(v)} заказов`, label, s < 0 ? C.empty : C.ramp[s]);
-        cell.addEventListener('pointermove', show);
-        cell.addEventListener('focus', show);
-        cell.addEventListener('pointerleave', hideTip);
-        cell.addEventListener('blur', hideTip);
+        cell.dataset.value = `${int(v)} заказов`;
+        const from = h * span, to = (from + span) % 24;
+        cell.dataset.label = `${r.weekdays[d].name}, ${String(from).padStart(2, '0')}:00–${String(to).padStart(2, '0')}:00`;
+        cell.dataset.color = s < 0 ? C.empty : C.ramp[s];
         host.append(cell);
       });
       host.append(el('span', 'ht', int(r.weekdays[d].orders)));
     });
 
+    if (!host.dataset.bound) {
+      const show = (e) => {
+        const cell = e.target.closest('.hc');
+        if (cell) showTip(e, cell.dataset.value, cell.dataset.label, cell.dataset.color);
+        else hideTip();
+      };
+      host.addEventListener('pointermove', show);
+      host.addEventListener('pointerleave', hideTip);
+      host.addEventListener('focusin', show);
+      host.addEventListener('focusout', hideTip);
+      host.dataset.bound = '1';
+    }
+
     const legend = $('heatLegend');
     legend.replaceChildren(el('span', 'muted', '0'));
     const sw0 = el('span', 'sw'); sw0.style.background = C.empty; legend.append(sw0);
     C.ramp.forEach((c) => { const sw = el('span', 'sw'); sw.style.background = c; legend.append(sw); });
-    legend.append(el('span', 'muted', `до ${int(max)} заказов в час`));
+    legend.append(el('span', 'muted', `до ${int(max)} заказов ${span === 1 ? 'в час' : 'за 2 часа'}`));
   };
 
   // ---------------------------- синхронизация ----------------------------

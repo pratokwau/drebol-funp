@@ -109,13 +109,10 @@ def remove_games(keys: list[str]) -> dict:
 # ---------------------------- товары ----------------------------
 
 
-def add_item(key: str, title: str, cost: float, keywords: str = "",
-             lot_id: str | int | None = None, price: float | None = None,
-             cost_cashback: float | None = None, has_cashback: bool = False) -> dict:
-    data = load()
-    if not any(g["key"] == key for g in data["games"]):
-        raise ValueError("Такой игры нет в списке")
-
+def _put_item(items: list[dict], title: str, cost: float, keywords: str = "",
+              lot_id: str | int | None = None, price: float | None = None,
+              cost_cashback: float | None = None, has_cashback: bool = False) -> bool:
+    """Кладёт товар в список игры. True — добавлен новый, False — обновлён существующий."""
     fields = {
         "cost": cost,
         "cost_cashback": cost_cashback,
@@ -124,19 +121,47 @@ def add_item(key: str, title: str, cost: float, keywords: str = "",
         "lot_id": lot_id,
         "price": price,
     }
-
-    items = data["items"].setdefault(key, [])
     same = next((i for i in items if i["title"].strip().lower() == title.strip().lower()), None)
     if same:
         same.update(fields)
-    else:
-        items.append({
-            "id": uuid.uuid4().hex[:12],
-            "title": title.strip(),
-            **fields,
-            "created_at": int(time.time()),
-        })
+        return False
+    items.append({
+        "id": uuid.uuid4().hex[:12],
+        "title": title.strip(),
+        **fields,
+        "created_at": int(time.time()),
+    })
+    return True
+
+
+def add_item(key: str, title: str, cost: float, keywords: str = "",
+             lot_id: str | int | None = None, price: float | None = None,
+             cost_cashback: float | None = None, has_cashback: bool = False) -> dict:
+    data = load()
+    if not any(g["key"] == key for g in data["games"]):
+        raise ValueError("Такой игры нет в списке")
+    _put_item(data["items"].setdefault(key, []), title, cost, keywords, lot_id, price,
+              cost_cashback, has_cashback)
     return save(data)
+
+
+def add_items(key: str, rows: list[dict]) -> dict:
+    """Сохраняет пачку товаров одной записью файла."""
+    data = load()
+    if not any(g["key"] == key for g in data["games"]):
+        raise ValueError("Такой игры нет в списке")
+
+    items = data["items"].setdefault(key, [])
+    added = updated = 0
+    for row in rows:
+        if _put_item(items, row["title"], row["cost"], row.get("keywords", ""),
+                     row.get("lot_id"), row.get("price"),
+                     row.get("cost_cashback"), row.get("has_cashback", False)):
+            added += 1
+        else:
+            updated += 1
+    save(data)
+    return {"items": items, "added": added, "updated": updated}
 
 
 def get_item(item_id: str) -> tuple[str, dict] | None:

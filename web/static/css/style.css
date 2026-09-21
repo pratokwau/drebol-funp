@@ -635,7 +635,7 @@ table.data .neg{color:#ff8095}
 .inbar.neg{background:#e66767}
 .bar-wrap .v{min-width:96px;text-align:right}
 
-.heat{display:grid;grid-template-columns:34px repeat(24,minmax(0,1fr)) 54px;gap:3px;align-items:center}
+.heat{--hl:34px;--ht:54px;display:grid;grid-template-columns:var(--hl) repeat(24,minmax(0,1fr)) var(--ht);gap:3px;align-items:center}
 .heat .hh{font-size:10.5px;color:var(--muted);text-align:left;font-variant-numeric:tabular-nums}
 .heat .hh.total,.heat .ht{text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .heat .hl{font-size:11.5px;color:var(--muted)}
@@ -669,6 +669,7 @@ table.data .neg{color:#ff8095}
 
 /* ---------- телефон: меню не должно распирать страницу ---------- */
 @media (max-width:760px){
+  .logo.small .logo-mark.has-img{width:42px;height:42px;border-radius:12px}
   .topbar{flex-wrap:wrap;gap:10px;padding:12px 16px}
   .nav{order:3;width:100%;margin:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .nav::-webkit-scrollbar{display:none}
@@ -765,8 +766,15 @@ table.data .neg{color:#ff8095}
 .lot .dup{margin-left:6px;font-size:11px;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--line)}
 
 /* ---------- свой логотип из data/brand ---------- */
-.logo-mark.has-img{background:none;box-shadow:none;animation:none;overflow:hidden;padding:0}
+.logo-mark.has-img{
+  background:none;box-shadow:0 6px 20px rgba(0,0,0,.45);animation:none;overflow:hidden;padding:0;
+  border:1px solid rgba(255,255,255,.09);
+}
 .logo-mark.has-img img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+/* своя картинка крупнее монограммы — её и должно быть видно */
+.logo.small .logo-mark.has-img{width:48px;height:48px;border-radius:14px}
+.auth-page .logo-mark.has-img{width:66px;height:66px;border-radius:19px}
+.auth-page .logo:has(.has-img){gap:16px}
 .brand-row{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.022)}
 .brand-row + .brand-row{margin-top:8px}
 .brand-prev{width:44px;height:44px;border-radius:12px;flex-shrink:0;display:grid;place-items:center;background:rgba(255,255,255,.05);overflow:hidden}
@@ -781,3 +789,26 @@ table.data .neg{color:#ff8095}
 .wipe-row + .wipe-row{margin-top:8px}
 .wipe-row .btn{flex-shrink:0;height:36px;padding:0 16px}
 .wipe-row .muted{font-size:11.5px}
+
+/* ---------- телефон: облегчаем фон и теплокарту ---------- */
+@media (max-width:760px){
+  .orb{filter:blur(46px);animation:none;opacity:.32}
+  .grid{animation:none}
+  .noise{display:none}
+  .panel,.kpi,.topbar{backdrop-filter:none}
+  .heat{--hl:24px;--ht:30px;gap:3px}
+  .heat .hc{height:22px;border-radius:4px}
+  .heat .hc:hover,.heat .hc:focus{transform:none;box-shadow:0 0 0 2px #7c5cff}
+  .heat .hh{font-size:9px}
+  .heat .hl,.heat .ht{font-size:10px}
+  .chart{min-height:220px}
+  .table-wrap .mini-btn{margin:10px auto 0;display:block}
+}
+
+/* ---------- сохранение списка лотов ---------- */
+.lots-bar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;
+  border:1px solid rgba(124,92,255,.3);border-radius:12px;background:rgba(124,92,255,.07);font-size:12.5px;
+}
+.lots-bar .muted{margin-right:auto}
+.lots-bar .btn{height:36px;padding:0 16px}

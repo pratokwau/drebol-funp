@@ -1,7 +1,6 @@
 """Отчёт по чистой прибыли из локального кэша заказов."""
 from __future__ import annotations
 
-import copy
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -22,6 +21,45 @@ PERIODS = {
 STATUS_KEYS = {"closed", "paid", "refunded", "partially_refunded", "unpaid"}
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+
+
+# посчитанные заказы держим до тех пор, пока не изменились исходные файлы:
+# иначе каждая смена фильтра заново перечитывает и пересчитывает всю базу
+_prepared: dict = {"key": None, "orders": [], "categories": [], "first": None}
+_FIELDS = ("id", "title", "category", "price", "amount", "buyer", "status_code", "date", "link")
+
+
+def _fingerprint() -> tuple:
+    def mtime(path) -> int:
+        try:
+            return path.stat().st_mtime_ns
+        except OSError:
+            return 0
+    return (mtime(orders_store.FILE), mtime(pricing.FILE),
+            mtime(pricing.CHOICES_FILE), mtime(pricing.OVERRIDES_FILE))
+
+
+def prepared() -> dict:
+    """Заказы с посчитанным закупом и прибылью. Пересчитываются, только если
+    поменялись база заказов, мин. цены или решения по заказам."""
+    key = _fingerprint()
+    if _prepared["key"] == key:
+        return _prepared
+
+    rows = [{f: o.get(f) for f in _FIELDS} for o in orders_store.load()["orders"].values()]
+    pricing.apply_to_orders(rows)
+    for order in rows:
+        order["_dt"] = orders_store._parse_date(order.get("date"))
+    rows = [o for o in rows if o["_dt"]]
+    rows.sort(key=lambda o: o["_dt"])
+
+    _prepared.update({
+        "key": key,
+        "orders": rows,
+        "categories": sorted({o.get("category") or "" for o in rows} - {""}),
+        "first": rows[0]["_dt"].date() if rows else None,
+    })
+    return _prepared
 
 
 def _range(period: str, date_from: str, date_to: str, now: datetime) -> tuple[date | None, date | None]:
@@ -96,16 +134,10 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "",
     period = period if period in PERIODS else "30d"
     wanted = {s for s in statuses.split(",") if s in STATUS_KEYS} or {"closed", "paid"}
 
-    cache = orders_store.load()
-    raw = list(cache["orders"].values())
-    orders = pricing.apply_to_orders(copy.deepcopy(raw))
-
-    for o in orders:
-        o["_dt"] = orders_store._parse_date(o.get("date"))
-    orders = [o for o in orders if o["_dt"]]
-
-    categories = sorted({o.get("category") or "" for o in orders} - {""})
-    first_date = min((o["_dt"].date() for o in orders), default=None)
+    ready = prepared()
+    orders = ready["orders"]
+    categories = ready["categories"]
+    first_date = ready["first"]
 
     a, b = _range(period, date_from, date_to, now)
     b = b or now.date()

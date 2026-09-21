@@ -81,6 +81,7 @@
       + (st.noCost ? ` · без закупа: ${st.noCost}` : '') + `.${sample}`;
   };
   let lotsCache = {};      // лоты с FunPay по ключу игры
+  const lotDraft = {};     // что уже вписал в поля закупа, но ещё не сохранил
 
   const toast = (msg, kind = '') => {
     toastEl.textContent = msg;
@@ -210,6 +211,10 @@
           <div class="lots-block">
             <button class="btn ghost-btn" data-lots="${esc(game.key)}"><span class="label">Подтянуть лоты с FunPay</span><span class="spinner"></span></button>
             <div class="lots" data-lotsbox="${esc(game.key)}"></div>
+            <div class="lots-bar" data-lotbar="${esc(game.key)}" hidden>
+              <span class="muted" data-lotcount="${esc(game.key)}"></span>
+              <button class="btn primary" data-saveall="${esc(game.key)}"><span class="label">Сохранить все</span><span class="spinner"></span></button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -374,9 +379,18 @@
 
   $('games').addEventListener('input', (e) => {
     const inp = e.target.closest('[data-cbp]');
-    if (!inp) return;
-    cbPercent[inp.dataset.cbp] = inp.value;
-    paintCbPreview(inp.dataset.cbp);
+    if (inp) {
+      cbPercent[inp.dataset.cbp] = inp.value;
+      paintCbPreview(inp.dataset.cbp);
+      return;
+    }
+    // введённые закупы держим в памяти: перерисовка списка их больше не стирает
+    const lotInput = e.target.closest('[data-lotkey]');
+    if (!lotInput) return;
+    const key = lotInput.closest('.game').dataset.key;
+    const draft = (lotDraft[key] = lotDraft[key] || {});
+    draft[lotInput.dataset.lotkey] = { ...draft[lotInput.dataset.lotkey], [lotInput.dataset.lf]: lotInput.value };
+    paintLotBar(key);
   });
 
   $('games').addEventListener('change', (e) => {
@@ -483,6 +497,36 @@
       return;
     }
 
+    const saveAll = t.closest('[data-saveall]');
+    if (saveAll) {
+      const key = saveAll.dataset.saveall;
+      const rows = draftRows(key);
+      if (!rows.length) { toast('Сначала впиши закуп хотя бы в одну строку', 'bad'); return; }
+      busy(saveAll, true);
+      try {
+        const r = await api('/api/pricing/items/bulk', {
+          method: 'POST',
+          body: JSON.stringify({
+            key,
+            items: rows.map(({ lot, draft }) => ({
+              title: lot.title, cost: draft.cost, cost_cashback: draft.cost_cashback || '',
+              lot_id: lot.id, price: lot.price,
+            })),
+          }),
+        });
+        rows.forEach(({ lot }) => { if (lotDraft[key]) delete lotDraft[key][lot.id]; });
+        await reload();
+        renderLots(key);
+        toast(`Сохранено товаров: ${r.added + r.updated}`
+          + (r.errors && r.errors.length ? `, с ошибкой: ${r.errors.length}` : ''), 'good');
+        if (r.errors && r.errors.length) toast(r.errors[0], 'bad');
+      } catch (err) {
+        if (err.message !== 'auth') toast(err.message, 'bad');
+      }
+      busy(saveAll, false);
+      return;
+    }
+
     const lots = t.closest('[data-lots]');
     if (lots) {
       const key = lots.dataset.lots;
@@ -517,6 +561,7 @@
             lot_id: box.dataset.lot, price: Number(box.dataset.price),
           }),
         });
+        if (lotDraft[key]) delete lotDraft[key][box.dataset.lot];
         await reload();
         renderLots(key);
         toast('Добавлено в мин. цены', 'good');
@@ -574,6 +619,29 @@
     if (e.key === 'Escape') { editing = null; render(); }
   });
 
+  const draftRows = (key) => {
+    const drafts = lotDraft[key] || {};
+    const items = state.items[key] || [];
+    return (lotsCache[key] || [])
+      .filter((lot) => !alreadyAdded(lot.title || '', items))
+      .map((lot) => ({ lot, draft: drafts[lot.id] || {} }))
+      .filter(({ draft }) => String(draft.cost ?? '').trim() !== '');
+  };
+
+  const paintLotBar = (key) => {
+    const bar = document.querySelector(`[data-lotbar="${key}"]`);
+    if (!bar) return;
+    const ready = draftRows(key).length;
+    const total = (lotsCache[key] || []).length;
+    bar.hidden = !total;
+    bar.querySelector(`[data-lotcount="${key}"]`).textContent = ready
+      ? `Заполнено закупов: ${ready} — сохранятся все разом`
+      : 'Впиши закуп в нужные строки и нажми «Сохранить все»';
+    bar.querySelector(`[data-saveall="${key}"]`).disabled = !ready;
+    bar.querySelector(`[data-saveall="${key}"] .label`).textContent = ready
+      ? `Сохранить все (${ready})` : 'Сохранить все';
+  };
+
   const renderLots = (key) => {
     const box = document.querySelector(`[data-lotsbox="${key}"]`);
     if (!box) return;
@@ -596,6 +664,7 @@
       const lo = Math.min(...g.prices), hi = Math.max(...g.prices);
       return lo === hi ? money(lo) : `${money(lo)}–${money(hi)}`;
     };
+    const bar = document.querySelector(`[data-lotbar="${key}"]`);
     box.innerHTML = groups.map((lot) => `
       <div class="lot" data-title="${esc(lot.title)}" data-lot="${esc(lot.id)}" data-price="${esc(lot.price)}">
         <span class="ltitle">${esc(lot.title) || '<span class="muted">без названия</span>'}${
@@ -603,10 +672,14 @@
         <span class="lprice">${priceText(lot)} ${esc(lot.currency)}</span>
         ${alreadyAdded(lot.title || '', items)
           ? '<span class="pill on">уже в списке</span>'
-          : `<input type="text" class="search narrow" data-lf="cost" inputmode="decimal" placeholder="закуп">
-             <input type="text" class="search narrow" data-lf="cost_cashback" inputmode="decimal" placeholder="с кэшбеком">
+          : `<input type="text" class="search narrow" data-lf="cost" data-lotkey="${esc(lot.id)}" inputmode="decimal"
+                    placeholder="закуп" value="${esc((lotDraft[key] || {})[lot.id]?.cost ?? '')}">
+             <input type="text" class="search narrow" data-lf="cost_cashback" data-lotkey="${esc(lot.id)}" inputmode="decimal"
+                    placeholder="с кэшбеком" value="${esc((lotDraft[key] || {})[lot.id]?.cost_cashback ?? '')}">
              <button class="btn ghost-btn" data-savelot="${esc(key)}"><span class="label">Добавить</span><span class="spinner"></span></button>`}
       </div>`).join('') || '<p class="muted pad">Лотов в этом разделе нет.</p>';
+    paintLotBar(key);
+    if (bar) bar.hidden = !(lotsCache[key] || []).length;
   };
 
   // ---------------------------- комиссия ----------------------------
