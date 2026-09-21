@@ -62,6 +62,64 @@ def prepared() -> dict:
     return _prepared
 
 
+# ---------------------------- список заказов из базы ----------------------------
+
+ORDER_FILTERS = {
+    "all": lambda o: True,
+    "undecided": lambda o: bool(o.get("variants")) and not o.get("choice")
+    and not o.get("manual") and not o.get("refunded"),
+    "nocost": lambda o: o.get("profit") is None and not o.get("refunded"),
+    "loss": lambda o: o.get("profit") is not None and o["profit"] < 0,
+    "manual": lambda o: bool(o.get("manual")) and not o.get("refunded"),
+    "cashback": lambda o: bool(o.get("cashback_used")),
+}
+ORDER_STATUS = {
+    "all": lambda o: True,
+    "paid": lambda o: o.get("status_code") == "paid",
+    "closed": lambda o: o.get("status_code") == "closed",
+    "refund": lambda o: bool(o.get("refunded")),
+}
+ORDER_SORT = {
+    "new": lambda o: (o["_dt"], ),
+    "old": lambda o: (o["_dt"], ),
+    "profit_desc": lambda o: (o.get("profit") if o.get("profit") is not None else -1e18, ),
+    "profit_asc": lambda o: (o.get("profit") if o.get("profit") is not None else 1e18, ),
+    "price_desc": lambda o: (float(o.get("price") or 0), ),
+}
+SEARCH_FIELDS = ("title", "buyer", "id", "category", "matched")
+
+
+def _text_ok(order: dict, needle: str) -> bool:
+    return not needle or any(needle in str(order.get(f) or "").lower() for f in SEARCH_FIELDS)
+
+
+def select_orders(kind: str = "all", status: str = "all", q: str = "") -> list[dict]:
+    """Заказы из локальной базы под фильтры вкладки «Заказы»."""
+    keep = ORDER_FILTERS.get(kind, ORDER_FILTERS["all"])
+    stat = ORDER_STATUS.get(status, ORDER_STATUS["all"])
+    needle = (q or "").strip().lower()
+    return [o for o in prepared()["orders"] if stat(o) and keep(o) and _text_ok(o, needle)]
+
+
+def orders_view(kind: str = "all", status: str = "all", q: str = "", sort: str = "new",
+                limit: int = 300, offset: int = 0) -> dict:
+    rows = select_orders(kind, status, q)
+    total = len(rows)
+
+    key = ORDER_SORT.get(sort, ORDER_SORT["new"])
+    rows = sorted(rows, key=key, reverse=sort not in ("old", "profit_asc"))
+    page = [{k: v for k, v in o.items() if k != "_dt"} for o in rows[offset:offset + limit]]
+
+    # счётчики для кнопок фильтров: по одной оси, когда вторая уже применена
+    counts = {name: sum(1 for o in select_orders(name, status, q)) for name in ORDER_FILTERS}
+    statuses = {name: sum(1 for o in select_orders(kind, name, q)) for name in ORDER_STATUS}
+    return {
+        "ok": True, "orders": page, "total": total, "offset": offset, "limit": limit,
+        "counts": counts, "statuses": statuses,
+        "cached": len(prepared()["orders"]), "synced_at": orders_store.status()["synced_at"],
+    }
+
+
 def _range(period: str, date_from: str, date_to: str, now: datetime) -> tuple[date | None, date | None]:
     """Границы периода включительно. None — без ограничения."""
     today = now.date()

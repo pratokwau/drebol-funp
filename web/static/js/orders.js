@@ -49,8 +49,8 @@
   // ---------------------------- фильтры и сортировка ----------------------------
   const FKEY = 'drebol-orders-filters';
   const flt = (() => {
-    try { return { st: 'all', cf: 'all', sort: 'new', ...JSON.parse(localStorage.getItem(FKEY) || '{}') }; }
-    catch { return { st: 'all', cf: 'all', sort: 'new' }; }
+    try { return { st: 'all', cf: 'all', sort: 'new', src: 'live', ...JSON.parse(localStorage.getItem(FKEY) || '{}') }; }
+    catch { return { st: 'all', cf: 'all', sort: 'new', src: 'live' }; }
   })();
   const saveFlt = () => { try { localStorage.setItem(FKEY, JSON.stringify(flt)); } catch { /* приватный режим */ } };
 
@@ -79,15 +79,23 @@
     price_desc: (a, b) => (b.price || 0) - (a.price || 0),
   };
 
+  let serverCounts = null;   // счётчики приходят с сервера, когда читаем из базы
+  let cacheTotal = 0;        // сколько всего заказов под фильтром в базе
+
   const paintChips = (q) => {
+    document.querySelectorAll('#srcChips [data-src]').forEach((b) => b.classList.toggle('on', b.dataset.src === flt.src));
     document.querySelectorAll('#statusChips [data-st]').forEach((b) => {
-      const n = all.filter((o) => STATUS[b.dataset.st](o) && COST[flt.cf](o) && matchesText(o, q)).length;
+      const n = serverCounts
+        ? (serverCounts.statuses[b.dataset.st] ?? 0)
+        : all.filter((o) => STATUS[b.dataset.st](o) && COST[flt.cf](o) && matchesText(o, q)).length;
       b.classList.toggle('on', b.dataset.st === flt.st);
       b.dataset.count = n;
       b.innerHTML = `${esc(b.textContent.replace(/\s*\d+$/, ''))} <span class="cnt">${n}</span>`;
     });
     document.querySelectorAll('#costChips [data-cf]').forEach((b) => {
-      const n = all.filter((o) => COST[b.dataset.cf](o) && STATUS[flt.st](o) && matchesText(o, q)).length;
+      const n = serverCounts
+        ? (serverCounts.counts[b.dataset.cf] ?? 0)
+        : all.filter((o) => COST[b.dataset.cf](o) && STATUS[flt.st](o) && matchesText(o, q)).length;
       b.classList.toggle('on', b.dataset.cf === flt.cf);
       b.classList.toggle('attention', b.dataset.cf === 'undecided' && n > 0);
       b.innerHTML = `${esc(b.textContent.replace(/\s*\d+$/, ''))} <span class="cnt">${n}</span>`;
@@ -193,22 +201,27 @@
 
   const render = () => {
     const q = $('filter').value.trim().toLowerCase();
-    const shown = all
-      .filter((o) => STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q))
-      .sort(SORT[flt.sort] || SORT.new);
+    const fromCache = flt.src === 'cache';
+    const shown = fromCache
+      ? all
+      : all.filter((o) => STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q))
+        .sort(SORT[flt.sort] || SORT.new);
     const filtered = q || flt.st !== 'all' || flt.cf !== 'all';
 
     paintChips(q);
     $('sort').value = flt.sort;
     $('list').innerHTML = shown.map(row).join('');
-    $('cntPill').textContent = filtered
-      ? `${shown.length} из ${all.length}`
-      : `загружено ${all.length}`;
+    $('cntPill').textContent = fromCache
+      ? `${shown.length} из ${cacheTotal} в базе`
+      : (filtered ? `${shown.length} из ${all.length}` : `загружено ${all.length}`);
 
     // массовый выбор — для показанных заказов, где он ещё нужен
     const pending = shown.filter(needsChoice);
-    $('bulkChoice').hidden = !pending.length;
-    $('bulkInfo').textContent = `Не выбран закуп в ${pending.length} ${pending.length === 1 ? 'заказе' : 'заказах'} из показанных:`;
+    const pendingAll = fromCache && serverCounts ? serverCounts.counts.undecided : pending.length;
+    $('bulkChoice').hidden = !pendingAll;
+    $('bulkInfo').textContent = fromCache
+      ? `Не выбран закуп в ${pendingAll} ${pendingAll === 1 ? 'заказе' : 'заказах'} по этому фильтру:`
+      : `Не выбран закуп в ${pending.length} ${pending.length === 1 ? 'заказе' : 'заказах'} из показанных:`;
 
     const sum = shown.reduce((acc, o) => acc + (Number(o.price) || 0), 0);
     const cur = shown.length ? shown[0].currency : '';
@@ -236,6 +249,50 @@
     } else {
       empty.hidden = true;
     }
+  };
+
+  const loadFromCache = async (btn, more = false) => {
+    if (loading) return;
+    loading = true;
+    busy(btn, true);
+    const offset = more ? all.length : 0;
+    $('footHint').textContent = 'Читаю из базы заказов...';
+    try {
+      const params = new URLSearchParams({
+        filter: flt.cf, status: flt.st, q: $('filter').value.trim(),
+        sort: flt.sort, limit: 300, offset,
+      });
+      const res = await fetch(`/api/orders/cached?${params}`);
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.error || 'не удалось прочитать базу');
+
+      all = more ? all.concat(data.orders) : data.orders;
+      serverCounts = { counts: data.counts, statuses: data.statuses };
+      cacheTotal = data.total;
+      nextFrom = null;
+      render();
+      $('moreBtn').hidden = all.length >= data.total;
+      $('moreBtn').querySelector('.label').textContent = `Показать ещё ${Math.min(300, data.total - all.length)}`;
+      $('footHint').textContent = data.cached
+        ? `Показано ${all.length} из ${data.total} по фильтру. Всего в базе ${data.cached} заказов.`
+        : 'База пустая — загрузи заказы во вкладке «Прибыль».';
+      paintFoot2(data);
+    } catch (e) {
+      $('footHint').innerHTML = `<span class="err">${esc(e.message)}</span>`;
+    } finally {
+      loading = false;
+      busy(btn, false);
+    }
+  };
+
+  // хвост подсказки в режиме базы
+  const paintFoot2 = (data) => {
+    const bits = [];
+    if (data.counts.undecided) bits.push(`не выбран закуп: ${data.counts.undecided}`);
+    if (data.counts.nocost) bits.push(`без закупа: ${data.counts.nocost}`);
+    if (data.counts.manual) bits.push(`закуп вручную: ${data.counts.manual}`);
+    if (bits.length) $('footHint').textContent += ` По всей базе — ${bits.join(', ')}.`;
   };
 
   const load = async (btn) => {
@@ -271,51 +328,83 @@
     }
   };
 
-  $('moreBtn').addEventListener('click', () => load($('moreBtn')));
+  $('moreBtn').addEventListener('click', () => (flt.src === 'cache'
+    ? loadFromCache($('moreBtn'), true)
+    : load($('moreBtn'))));
 
-  $('reloadBtn').addEventListener('click', () => {
+  const reloadList = () => {
     all = [];
     nextFrom = null;
+    serverCounts = null;
     $('list').innerHTML = '';
     $('moreBtn').hidden = true;
-    load($('reloadBtn'));
+    $('moreBtn').querySelector('.label').textContent = 'Загрузить ещё 100';
+    return flt.src === 'cache' ? loadFromCache($('reloadBtn')) : load($('reloadBtn'));
+  };
+
+  $('srcChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-src]');
+    if (!b || b.dataset.src === flt.src) return;
+    flt.src = b.dataset.src;
+    saveFlt();
+    reloadList();
+    toast(flt.src === 'cache' ? 'Читаю из базы — все заказы сразу' : 'Тяну свежие с FunPay по 100');
   });
 
-  $('filter').addEventListener('input', render);
+  $('reloadBtn').addEventListener('click', reloadList);
 
-  $('sort').addEventListener('change', () => { flt.sort = $('sort').value; saveFlt(); render(); });
+  let searchTimer = null;
+  $('filter').addEventListener('input', () => {
+    if (flt.src !== 'cache') { render(); return; }
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(reloadList, 350);
+  });
+
+  const applyFilters = () => (flt.src === 'cache' ? reloadList() : render());
+
+  $('sort').addEventListener('change', () => { flt.sort = $('sort').value; saveFlt(); applyFilters(); });
   $('statusChips').addEventListener('click', (e) => {
     const b = e.target.closest('[data-st]');
     if (!b) return;
-    flt.st = b.dataset.st; saveFlt(); render();
+    flt.st = b.dataset.st; saveFlt(); applyFilters();
   });
   $('costChips').addEventListener('click', (e) => {
     const b = e.target.closest('[data-cf]');
     if (!b) return;
-    flt.cf = b.dataset.cf; saveFlt(); render();
+    flt.cf = b.dataset.cf; saveFlt(); applyFilters();
   });
 
   $('bulkChoice').addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-bulk]');
     if (!btn) return;
     const q = $('filter').value.trim().toLowerCase();
-    const targets = all.filter((o) => STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q) && needsChoice(o));
-    if (!targets.length) return;
+    const fromCache = flt.src === 'cache';
+    const targets = all.filter((o) => (fromCache
+      ? needsChoice(o)
+      : STATUS[flt.st](o) && COST[flt.cf](o) && matchesText(o, q) && needsChoice(o)));
+    const count = fromCache && serverCounts ? serverCounts.counts.undecided : targets.length;
+    if (!count) return;
     const label = btn.dataset.bulk === 'cashback' ? 'с кэшбеком' : 'без кэшбека';
-    if (!confirm(`Поставить закуп «${label}» в ${targets.length} заказах?`)) return;
+    if (!confirm(`Поставить закуп «${label}» в ${count} заказах?`)) return;
     btn.classList.add('loading'); btn.disabled = true;
     try {
-      const res = await fetch('/api/orders/choice-bulk', {
+      const res = await fetch(fromCache ? '/api/orders/choice-filter' : '/api/orders/choice-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: targets.map((o) => o.id), choice: btn.dataset.bulk }),
+        body: JSON.stringify(fromCache
+          ? { filter: flt.cf, status: flt.st, q: $('filter').value.trim(), choice: btn.dataset.bulk }
+          : { ids: targets.map((o) => o.id), choice: btn.dataset.bulk }),
       });
       if (res.status === 401) { window.location.href = '/login'; return; }
       const data = await res.json().catch(() => ({}));
       if (!data.ok) throw new Error(data.error || 'не сохранилось');
-      targets.forEach((o) => applyChoice(o, btn.dataset.bulk));
-      render();
-      toast(`${targets.length} заказов — закуп ${label}`, 'good');
+      if (fromCache) {
+        await reloadList();
+      } else {
+        targets.forEach((o) => applyChoice(o, btn.dataset.bulk));
+        render();
+      }
+      toast(`${data.count || targets.length} заказов — закуп ${label}`, 'good');
     } catch (err) {
       toast(`Не сохранилось: ${err.message}`, 'bad');
     }
@@ -410,5 +499,5 @@
     .then((d) => ($('user').textContent = d.login))
     .catch(() => (window.location.href = '/login'));
 
-  load($('reloadBtn'));
+  reloadList();
 })();

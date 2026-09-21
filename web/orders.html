@@ -44,7 +44,7 @@
       <div class="panel-head">
         <div>
           <h2>Заказы</h2>
-          <p class="muted">Продажи с FunPay, по 100 штук за раз. Прибыль считается по ценам закупа из «Мин. цен». Если у товара две цены — выбери в заказе, с кэшбеком или без.</p>
+          <p class="muted">Продажи с FunPay: свежие — по 100 за раз, из базы — все сразу. Прибыль считается по ценам закупа из «Мин. цен». Если у товара две цены — выбери в заказе, с кэшбеком или без.</p>
         </div>
         <div class="orders-sum">
           <span class="pill" id="cntPill">загружено 0</span>
@@ -66,6 +66,10 @@
       </div>
 
       <div class="order-filters">
+        <div class="chips small" id="srcChips">
+          <button data-src="live">С FunPay · по 100</button>
+          <button data-src="cache">Из базы · все сразу</button>
+        </div>
         <div class="chips small" id="statusChips">
           <button data-st="all">Все</button>
           <button data-st="paid">Оплачены</button>

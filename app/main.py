@@ -411,6 +411,34 @@ async def api_orders_choice(request: Request):
     return {"ok": True, "id": order_id, "choice": choice}
 
 
+@app.get("/api/orders/cached", dependencies=[Depends(require_auth)])
+def api_orders_cached(filter: str = "all", status: str = "all", q: str = "",
+                      sort: str = "new", limit: int = 300, offset: int = 0):
+    """Заказы из локальной базы — все сразу, с фильтрами и без подгрузки по 100."""
+    limit = max(1, min(int(limit), 1000))
+    offset = max(0, int(offset))
+    return analytics.orders_view(filter, status, q, sort, limit, offset)
+
+
+@app.post("/api/orders/choice-filter", dependencies=[Depends(require_auth)])
+async def api_orders_choice_filter(request: Request):
+    """Выбор «с кэшбеком / без» для всех заказов под фильтром, а не только показанных."""
+    body = await request.json()
+    choice = body.get("choice")
+    if choice not in ("cashback", "plain", None):
+        return JSONResponse({"ok": False, "error": "Вариант: cashback или plain"}, status_code=400)
+
+    rows = analytics.select_orders(str(body.get("filter") or "all"),
+                                   str(body.get("status") or "all"),
+                                   str(body.get("q") or ""))
+    ids = [str(o["id"]) for o in rows
+           if o.get("variants") and not o.get("manual") and not o.get("refunded")]
+    if not ids:
+        return JSONResponse({"ok": False, "error": "Нет заказов с двумя ценами закупа"}, status_code=400)
+    pricing.set_choices(ids, choice)
+    return {"ok": True, "count": len(ids), "choice": choice}
+
+
 @app.post("/api/orders/choice-bulk", dependencies=[Depends(require_auth)])
 async def api_orders_choice_bulk(request: Request):
     """Выбор «с кэшбеком / без» сразу для списка заказов."""
