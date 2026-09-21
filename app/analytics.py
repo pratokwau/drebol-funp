@@ -150,6 +150,8 @@ def report(period: str = "30d", date_from: str = "", date_to: str = "",
             "unmatched": sum(1 for o in rows if profit_of(o) is None and not o.get("refunded")),
             "refunded": sum(1 for o in rows if o.get("refunded")),
             "manual": sum(1 for o in matched if o.get("manual")),
+            "no_game": len({o.get("category") for o in rows
+                            if o.get("game_missing") and not o.get("refunded")}),
             "matched_revenue": _money(m_revenue),
             "cost": _money(cost),
             "profit": _money(profit),

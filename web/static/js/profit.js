@@ -219,6 +219,7 @@
     if (t.unmatched) parts.push(`${int(t.unmatched)} из ${int(t.orders)} заказов без закупа — в прибыль не вошли`);
     if (t.zero_cost) parts.push(`${int(t.zero_cost)} с нулевым закупом`);
     if (t.undecided) parts.push(`в ${int(t.undecided)} не выбран закуп с кэшбеком или без — посчитаны без кэшбека`);
+    if (t.no_game) parts.push(`${int(t.no_game)} разделов FunPay не добавлены в «Мин. цены»`);
     warn.hidden = !parts.length;
     if (parts.length) {
       warn.replaceChildren(el('span', 'icon', '⚠'), el('span', '', `${parts.join('; ')}.`));

@@ -161,7 +161,7 @@
               ? (!p.cost
                   ? `у товара «${esc(o.matched)}» не задан закуп — прибыль показана как вся сумма`
                   : `закуп: ${money(p.cost)}${p.cb ? ' (с кэшбеком)' : ''} · товар «${esc(o.matched)}»`)
-              : 'товар не найден в мин. ценах'}">
+              : (o.game_missing ? `раздел «${esc(o.category || '')}» не добавлен в мин. цены` : 'товар не найден в мин. ценах')}">
         ${p.profit === null ? '—' : (p.profit > 0 ? '+' : '') + money(p.profit)}${
           p.cb ? '<span class="cbdot" title="учтён кэшбек">•</span>' : ''}${
           o.matched && !p.cost && !o.manual ? '<span class="warndot" title="закуп не задан">⚠</span>' : ''}
@@ -177,13 +177,15 @@
     const undecided = all.filter((o) => o.variants && !o.choice && !o.manual && !o.refunded).length;
     const zeroCost = all.filter((o) => o.matched && !o.manual && !o.refunded && !pick(o).cost).length;
     const refunds = all.filter((o) => o.refunded).length;
+    const noGame = new Set(all.filter((o) => o.game_missing && !o.refunded).map((o) => o.category)).size;
     const manual = all.filter((o) => o.manual && !o.refunded).length;
     const tail = (noMatch ? ` Без цены закупа: ${noMatch} — заведи товары во вкладке «Мин. цены».` : '')
       + (zeroCost ? ` С нулевым закупом: ${zeroCost} — проставь цены в «Мин. ценах».` : '')
       + (undecided ? ` Не выбран вариант закупа: ${undecided} — пока считаю без кэшбека.` : '')
       + (withCb ? ` С кэшбеком: ${withCb}.` : '')
       + (manual ? ` Закуп вписан вручную: ${manual}.` : '')
-      + (refunds ? ` Возвратов: ${refunds} — в прибыль не входят.` : '');
+      + (refunds ? ` Возвратов: ${refunds} — в прибыль не входят.` : '')
+      + (noGame ? ` Разделов нет в «Мин. ценах»: ${noGame} — добавь игру, иначе закуп не подставится.` : '');
     $('footHint').textContent = (nextFrom
       ? `Показано ${all.length}. Есть ещё — жми кнопку.`
       : `Это все заказы: ${all.length}.`) + tail;

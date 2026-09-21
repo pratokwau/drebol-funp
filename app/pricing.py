@@ -324,6 +324,33 @@ def _contains(haystack: list[str], needle: list[str]) -> bool:
     return False
 
 
+def game_tokens(game: dict) -> set[str]:
+    """Слова раздела: «Standoff 2» + «Золото»."""
+    return set(tokens(f"{game.get('game', '')} {game.get('name', '')}"))
+
+
+def game_for_category(data: dict, category: str) -> str | None:
+    """Ключ игры, к которой относится раздел заказа.
+
+    FunPay пишет в заказе «Standoff 2, Золото» — сверяем со словами раздела,
+    чтобы «100 золота» из другой игры не подхватился.
+    """
+    wanted = set(tokens(category or ""))
+    if not wanted:
+        return None
+
+    best, best_size = None, 0
+    for game in data["games"]:
+        mine = game_tokens(game)
+        if not mine:
+            continue
+        # раздел подходит, если слова совпали целиком или одно множество внутри другого
+        if mine == wanted or mine <= wanted or wanted <= mine:
+            if len(mine) > best_size:
+                best, best_size = game["key"], len(mine)
+    return best
+
+
 def _all_items(data: dict) -> list[dict]:
     out = []
     for key, items in data["items"].items():
@@ -367,6 +394,9 @@ def apply_to_orders(orders: list[dict]) -> list[dict]:
     """
     data = load()
     items = _all_items(data)
+    by_game: dict[str, list[dict]] = {}
+    for item in items:
+        by_game.setdefault(item["game_key"], []).append(item)
     choices = load_choices()
     overrides = load_overrides()
     fee = float(data.get("fee") or 0) / 100
@@ -374,12 +404,26 @@ def apply_to_orders(orders: list[dict]) -> list[dict]:
 
     for order in orders:
         oid = str(order.get("id"))
-        item = match(order.get("title", ""), items) if items else None
+        category = order.get("category") or ""
+        game_key = game_for_category(data, category)
+
+        # ищем товар только внутри раздела заказа; без раздела — по всем играм
+        if game_key:
+            pool = by_game.get(game_key, [])
+        elif category:
+            pool = []          # раздел есть, но такой игры в мин. ценах нет
+        else:
+            pool = items
+
+        item = match(order.get("title", ""), pool) if pool else None
         price = float(order.get("price") or 0)
         net = price * (1 - fee)
         amount = order.get("amount") or 1
         order["net"] = round(net, 2)
         order["matched"] = item["title"] if item else None
+        order["matched_game"] = game_key
+        # раздел у заказа есть, а такой игры в мин. ценах нет — её стоит добавить
+        order["game_missing"] = bool(category) and game_key is None
         order["refunded"] = order.get("status_code") in REFUND_STATUSES
         order["override"] = overrides.get(oid)
         order["manual"] = order["override"] is not None
