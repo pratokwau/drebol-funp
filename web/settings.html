@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>drebol-funp — настройки</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/favicon.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -77,6 +79,18 @@
     <section class="panel" style="--i:5">
       <div class="panel-head">
         <div>
+          <h2>Логотип сайта</h2>
+          <p class="muted">Положи картинку в папку на сервере — она станет логотипом в шапке и иконкой вкладки.</p>
+        </div>
+        <button class="btn ghost-btn" id="brandReload">Проверить файлы</button>
+      </div>
+      <div id="brandBox"></div>
+      <p class="tip" id="brandHint"></p>
+    </section>
+
+    <section class="panel" style="--i:6">
+      <div class="panel-head">
+        <div>
           <h2>Обновление с GitHub</h2>
           <p class="muted">Забирает свежий код из репозитория, ставит зависимости и перезапускает сайт.</p>
         </div>
@@ -100,5 +114,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="/static/js/settings.js"></script>
+  <script src="/static/js/brand.js"></script>
 </body>
 </html>

@@ -275,7 +275,7 @@ python3 -m venv "$APP_DIR/venv"
 ok "Зависимости установлены."
 
 # ---------- конфиг и пароль ----------
-mkdir -p "$APP_DIR/data"
+mkdir -p "$APP_DIR/data" "$APP_DIR/data/brand"
 if [[ -f "$APP_DIR/.env" ]]; then
   warn ".env уже существует — логин и пароль оставляю прежние."
   # shellcheck disable=SC1091

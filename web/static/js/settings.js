@@ -40,6 +40,13 @@
   // ---------- настройки FunPay ----------
   const esc = (v) => String(v ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
   const paintAccount = (acc) => {
     const card = document.getElementById('accountCard');
     if (!acc || !acc.id) { card.hidden = true; return; }
@@ -156,6 +163,39 @@
 
   $('checkBtn').addEventListener('click', () => fetchAccount($('checkBtn')));
 
+  // ---------- логотип сайта ----------
+  const brandRow = (title, file, note, preview) => {
+    const row = el('div', 'brand-row');
+    const prev = el('span', 'brand-prev');
+    if (preview) {
+      const img = new Image();
+      img.src = preview;
+      img.alt = '';
+      prev.append(img);
+    } else {
+      prev.append(el('span', 'muted', '—'));
+    }
+    const info = el('div', 'brand-info');
+    info.append(el('span', 'brand-name', title), el('span', 'brand-path', note));
+    row.append(prev, info, el('span', `pill ${file ? 'on' : ''}`, file ? `файл ${file}` : 'файла нет'));
+    return row;
+  };
+
+  const loadBrand = async () => {
+    const d = await get('/api/brand');
+    $('brandBox').replaceChildren(
+      brandRow('Логотип в шапке', d.logo_file, `${d.dir}/logo.png`, d.logo),
+      brandRow('Иконка вкладки', d.favicon_file,
+        `${d.dir}/favicon.png — если файла нет, берётся логотип`, d.logo),
+    );
+    $('brandHint').textContent = `Подойдут форматы: ${d.formats.join(', ')}. Имя файла — logo или favicon.`
+      + ' Папка не трогается при обновлении с GitHub. После замены файла обнови страницу.';
+  };
+
+  $('brandReload').addEventListener('click', () => loadBrand()
+    .then(() => toast('Проверил папку'))
+    .catch(() => toast('Не удалось прочитать папку', 'bad')));
+
   // ---------- обновление ----------
   const paintVersion = (v) => {
     const box = $('verBox');
@@ -247,5 +287,6 @@
 
   get('/api/me').then((d) => ($('user').textContent = d.login)).catch(() => {});
   loadSettings().catch(() => {});
+  loadBrand().catch(() => {});
   get('/api/version').then(paintVersion).catch(() => {});
 })();

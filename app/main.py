@@ -22,6 +22,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = BASE_DIR / "web"
 ENV_FILE = BASE_DIR / ".env"
 
+BRAND_DIR = BASE_DIR / "data" / "brand"
+BRAND_EXTS = (".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif", ".ico")
+BRAND_TYPES = {".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg",
+               ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
+               ".ico": "image/x-icon"}
+
+# запасная иконка, если своей не положили
+FALLBACK_ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+<rect width="64" height="64" rx="16" fill="url(#g)"/>
+<text x="32" y="42" font-family="Inter,system-ui,sans-serif" font-size="26" font-weight="700"
+      fill="#fff" text-anchor="middle">DF</text></svg>"""
+
+
+def brand_file(name: str) -> Path | None:
+    """Файл оформления из data/brand: logo.png, favicon.svg и т.п."""
+    for ext in BRAND_EXTS:
+        path = BRAND_DIR / f"{name}{ext}"
+        if path.is_file():
+            return path
+    return None
+
+
 COOKIE_NAME = "drebol_session"
 SESSION_TTL = 60 * 60 * 12  # 12 часов
 
@@ -227,6 +251,36 @@ async def api_me(request: Request):
     if not verify(request.cookies.get(COOKIE_NAME)):
         return JSONResponse({"ok": False}, status_code=401)
     return {"ok": True, "login": ADMIN_LOGIN, "domain": DOMAIN, "url": SITE_URL}
+
+
+@app.get("/api/brand")
+async def api_brand():
+    """Что лежит в data/brand — логотип и иконка вкладки. Нужен и до входа."""
+    logo, icon = brand_file("logo"), brand_file("favicon")
+    return {
+        "ok": True,
+        "dir": str(BRAND_DIR),
+        "logo": f"/brand/logo?v={int(logo.stat().st_mtime)}" if logo else None,
+        "logo_file": logo.name if logo else None,
+        "favicon_file": icon.name if icon else (logo.name if logo else None),
+        "formats": [e.lstrip(".") for e in BRAND_EXTS],
+    }
+
+
+@app.get("/brand/logo")
+async def brand_logo():
+    logo = brand_file("logo")
+    if not logo:
+        return JSONResponse({"ok": False, "error": "Логотип не найден"}, status_code=404)
+    return FileResponse(logo, media_type=BRAND_TYPES.get(logo.suffix.lower(), "image/png"))
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    icon = brand_file("favicon") or brand_file("logo")
+    if icon:
+        return FileResponse(icon, media_type=BRAND_TYPES.get(icon.suffix.lower(), "image/png"))
+    return Response(FALLBACK_ICON, media_type="image/svg+xml")
 
 
 @app.get("/api/health")
